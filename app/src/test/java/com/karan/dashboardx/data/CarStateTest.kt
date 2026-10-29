@@ -13,6 +13,31 @@ class CarStateTest {
     }
 
     @Test
+    fun value_fastPidsStaleAfter3s() {
+        for (p in listOf(Pid.RPM, Pid.SPEED, Pid.THROTTLE, Pid.MAF, Pid.MAP, Pid.LOAD)) {
+            val s = CarState(readings = mapOf(p to Reading(1.0, 0L)))
+            assertEquals("$p", 1.0, s.value(p, nowMs = 3000)!!, 0.0)
+            assertNull("$p", s.value(p, nowMs = 3001))
+        }
+    }
+
+    @Test
+    fun value_slowPidsStaleAfter10s() {
+        for (p in listOf(Pid.COOLANT, Pid.IAT, Pid.OIL)) {
+            val s = CarState(readings = mapOf(p to Reading(90.0, 0L)))
+            assertEquals("$p", 90.0, s.value(p, nowMs = 3001)!!, 0.0)
+            assertEquals("$p", 90.0, s.value(p, nowMs = 10_000)!!, 0.0)
+            assertNull("$p", s.value(p, nowMs = 10_001))
+        }
+    }
+
+    @Test
+    fun staleTable() {
+        assertEquals(10_000L, Pid.COOLANT.staleMs)
+        assertEquals(3_000L, Pid.RPM.staleMs)
+    }
+
+    @Test
     fun style_nextCycles() {
         assertEquals(Style.HUD, Style.RACING.next())
         assertEquals(Style.ARCADE, Style.HUD.next())

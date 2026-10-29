@@ -5,7 +5,8 @@ import com.karan.dashboardx.data.ConnectionStatus
 
 /**
  * Everything a renderer needs for one frame. RPM, speed and throttle are smoothed; the other
- * values are raw and already stale-checked (null = missing or older than 3 s).
+ * values are raw and already stale-checked (null = missing or older than the PID's
+ * [com.karan.dashboardx.data.Pid.staleMs]: 3 s, or 10 s for coolant, IAT and oil).
  */
 data class FrameModel(
     val rpm: Double?,

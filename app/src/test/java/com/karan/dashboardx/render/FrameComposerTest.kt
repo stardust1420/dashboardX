@@ -24,9 +24,12 @@ class FrameComposerTest {
         val st = state(0, Pid.COOLANT to 90.0, Pid.OIL to 95.0, Pid.RPM to 2000.0)
         assertEquals(90.0, c.at(st, 2999).coolant!!, 1e-9)
         val f = c.at(st, 3001)
-        assertNull(f.coolant)
-        assertNull(f.oil)
         assertNull(f.rpm)
+        assertEquals(90.0, f.coolant!!, 1e-9) // slow PIDs: 10 s window
+        assertEquals(95.0, f.oil!!, 1e-9)
+        val g = c.at(st, 10_001)
+        assertNull(g.coolant)
+        assertNull(g.oil)
     }
 
     @Test
