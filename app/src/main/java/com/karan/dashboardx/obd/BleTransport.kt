@@ -31,44 +31,52 @@ class BleTransport(
     private val rx = Channel<ByteArray>(Channel.UNLIMITED)
 
     // One outstanding GATT operation at a time; each is completed by its callback.
-    @Volatile private var pending: CompletableDeferred<Int>? = null
+    private enum class Kind { CONNECT, MTU, DISCOVER, DESCRIPTOR_WRITE, CHAR_WRITE }
+
+    private class Pending(val kind: Kind, val result: CompletableDeferred<Int> = CompletableDeferred())
+
+    @Volatile private var pending: Pending? = null
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                complete(status)
+                complete(Kind.CONNECT, status)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 disconnected = IOException("BLE disconnected (status $status)")
                 rx.close(disconnected)
-                pending?.completeExceptionally(disconnected!!)
+                pending?.result?.completeExceptionally(disconnected!!)
             }
         }
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS) chunkSize = maxOf(20, mtu - 3)
-            complete(status)
+            complete(Kind.MTU, status)
         }
 
-        override fun onServicesDiscovered(g: BluetoothGatt, status: Int) = complete(status)
-        override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) = complete(status)
-        override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) = complete(status)
+        override fun onServicesDiscovered(g: BluetoothGatt, status: Int) = complete(Kind.DISCOVER, status)
+        override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) =
+            complete(Kind.DESCRIPTOR_WRITE, status)
+        override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) =
+            complete(Kind.CHAR_WRITE, status)
 
         override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) {
             c.value?.let { rx.trySend(it.copyOf()) }
         }
 
-        private fun complete(status: Int) {
-            pending?.complete(status)
+        /** Completes the pending op only if it is the kind this callback belongs to; stray/late callbacks are dropped. */
+        private fun complete(kind: Kind, status: Int) {
+            val p = pending ?: return
+            if (p.kind == kind) p.result.complete(status)
         }
     }
 
     /** Starts [start], then waits for its callback. Throws IOException on failure/timeout; closes the GATT on cancellation. */
-    private suspend fun op(what: String, timeoutMs: Long, start: () -> Boolean): Int {
-        val d = CompletableDeferred<Int>()
+    private suspend fun op(kind: Kind, what: String, timeoutMs: Long, start: () -> Boolean): Int {
+        val d = Pending(kind)
         pending = d
         try {
             if (!start()) throw IOException("$what: could not start")
-            return withTimeout(timeoutMs) { d.await() }
+            return withTimeout(timeoutMs) { d.result.await() }
         } catch (e: TimeoutCancellationException) {
             throw IOException("$what: timeout")
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -89,7 +97,7 @@ class BleTransport(
         }
         try {
             var g: BluetoothGatt? = null
-            val st = op("connect", 10_000) {
+            val st = op(Kind.CONNECT, "connect", 10_000) {
                 g = device.connectGatt(ctx, false, callback, android.bluetooth.BluetoothDevice.TRANSPORT_LE)
                 gatt = g
                 g != null
@@ -99,12 +107,12 @@ class BleTransport(
 
             // MTU is best effort; if it fails we chunk to 20 bytes.
             try {
-                op("mtu", 2_000) { gg.requestMtu(247) }
+                op(Kind.MTU, "mtu", 2_000) { gg.requestMtu(247) }
             } catch (e: IOException) {
                 if (disconnected != null) throw e
             }
 
-            val sd = op("discover", 10_000) { gg.discoverServices() }
+            val sd = op(Kind.DISCOVER, "discover", 10_000) { gg.discoverServices() }
             if (sd != BluetoothGatt.GATT_SUCCESS) throw IOException("service discovery failed ($sd)")
 
             val (notify, write) = pick(gg) ?: throw IOException("no UART characteristics found")
@@ -114,7 +122,7 @@ class BleTransport(
             val useIndicate = notify.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY == 0
             cccd.value = if (useIndicate) BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
             else BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            val ds = op("cccd", 5_000) { gg.writeDescriptor(cccd) }
+            val ds = op(Kind.DESCRIPTOR_WRITE, "cccd", 5_000) { gg.writeDescriptor(cccd) }
             if (ds != BluetoothGatt.GATT_SUCCESS) throw IOException("CCCD write failed ($ds)")
         } catch (e: IOException) {
             close()
@@ -159,7 +167,7 @@ class BleTransport(
                 val chunk = bytes.copyOfRange(off, minOf(bytes.size, off + chunkSize))
                 off += chunk.size
                 if (withResponse) {
-                    val st = op("write", 2_000) {
+                    val st = op(Kind.CHAR_WRITE, "write", 2_000) {
                         w.value = chunk
                         g.writeCharacteristic(w)
                     }
@@ -205,7 +213,7 @@ class BleTransport(
         gatt = null
         writeChar = null
         rx.close()
-        pending?.completeExceptionally(IOException("closed"))
+        pending?.result?.completeExceptionally(IOException("closed"))
         if (g != null) {
             runCatching { g.disconnect() }
             runCatching { g.close() }
