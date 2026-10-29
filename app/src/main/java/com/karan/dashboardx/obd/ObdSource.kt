@@ -84,6 +84,7 @@ class ObdSource(
                 log.add("unexpected ${e.javaClass.simpleName}: ${e.message}")
             } finally {
                 t?.close()
+                _state.value = _state.value.copy(instantKml = null)
             }
             setStatus(ConnectionStatus.RECONNECTING)
             val wait = backoffMs(attempt)
@@ -120,6 +121,7 @@ class ObdSource(
     override fun stop() {
         job?.cancel() // the run's finally block closes its transport
         job = null
+        _state.value = _state.value.copy(instantKml = null)
         synchronized(statusLock) { _status.value = ConnectionStatus.IDLE_NEEDS_SETUP }
     }
 }
