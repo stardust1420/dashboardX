@@ -13,6 +13,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.karan.dashboardx.DashRuntime
 import com.karan.dashboardx.data.Style
 import com.karan.dashboardx.render.Fonts
+import com.karan.dashboardx.render.FrameModel
 import com.karan.dashboardx.render.GaugeRenderer
 import com.karan.dashboardx.render.Viewport
 import com.karan.dashboardx.render.rendererFor
@@ -29,6 +30,9 @@ import java.util.EnumMap
 class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycleObserver {
     /** Set by the Style action; read once per frame on the render thread. */
     @Volatile var style: Style = Style.RACING
+
+    /** Called on the render thread with each frame's model, before it is drawn (the engine sound feed). */
+    @Volatile var onFrame: ((FrameModel) -> Unit)? = null
 
     private val fonts = Fonts(carContext)
     private val renderers = EnumMap<Style, GaugeRenderer>(Style::class.java) // render thread only
@@ -156,6 +160,7 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
         try {
             // Wall clock: CarState readings are stamped with System.currentTimeMillis().
             val f = DashRuntime.frame(System.currentTimeMillis())
+            onFrame?.invoke(f)
             canvas.drawColor(Color.BLACK)
             val save = canvas.save()
             canvas.translate(vp.dx, vp.dy)

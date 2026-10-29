@@ -10,17 +10,28 @@ import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.karan.dashboardx.DashRuntime
+import com.karan.dashboardx.alerts.Warning
+import com.karan.dashboardx.audio.Chime
+import com.karan.dashboardx.audio.EngineSoundController
 
 /**
  * The car dashboard: a [NavigationTemplate] whose map area is our [SurfaceRenderer], with an
  * action strip of Style (cycle and persist the style) and Sound (on/off).
  * Holds the [DashRuntime] from create to destroy.
+ *
+ * Audio: owns one [EngineSoundController] (create to destroy), fed every drawn frame through
+ * [SurfaceRenderer.onFrame]. The engine sound is off at every start and is switched off whenever
+ * the screen stops, so it never plays while the car screen is not visible. Warning chimes play
+ * through [DashRuntime.onChime] whatever the Sound setting.
  */
 class DashScreen(carContext: CarContext) : Screen(carContext), DefaultLifecycleObserver {
     private val renderer = SurfaceRenderer(carContext)
 
-    /** Engine sound on/off; off at every start. TEMP: Task 11 replaces this with EngineSoundController. */
-    private var soundOn = false
+    private var sound: EngineSoundController? = null // main thread
+    private val chimeHook: (Warning) -> Unit = { w -> Chime.play(carContext, w) }
+
+    /** The template shows the sound as on but onStop turned it off: refresh the icon on next start. */
+    private var iconStale = false
 
     init {
         lifecycle.addObserver(this)
@@ -33,11 +44,34 @@ class DashScreen(carContext: CarContext) : Screen(carContext), DefaultLifecycleO
         DashRuntime.demoWhenUnconfigured = true
         DashRuntime.acquire(carContext)
         renderer.style = DashRuntime.settings.style
+        val controller = EngineSoundController(carContext)
+        sound = controller
+        renderer.onFrame = { f -> controller.update(f.rpm, f.throttle) }
+        DashRuntime.onChime = chimeHook
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(renderer)
+    }
+
+    override fun onStart(owner: LifecycleOwner) {
+        if (iconStale) {
+            iconStale = false
+            invalidate()
+        }
+    }
+
+    override fun onStop(owner: LifecycleOwner) {
+        val s = sound ?: return
+        if (s.enabled) {
+            s.enabled = false
+            iconStale = true
+        }
     }
 
     override fun onDestroy(owner: LifecycleOwner) {
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(null)
+        renderer.onFrame = null
+        sound?.release()
+        sound = null
+        if (DashRuntime.onChime === chimeHook) DashRuntime.onChime = null
         DashRuntime.release()
     }
 
@@ -52,9 +86,9 @@ class DashScreen(carContext: CarContext) : Screen(carContext), DefaultLifecycleO
             }
             .build()
         val sound = Action.Builder()
-            .setIcon(if (soundOn) CarIcons.soundOn else CarIcons.soundOff)
+            .setIcon(if (sound?.enabled == true) CarIcons.soundOn else CarIcons.soundOff)
             .setOnClickListener {
-                soundOn = !soundOn
+                sound?.let { it.enabled = !it.enabled }
                 invalidate()
             }
             .build()
