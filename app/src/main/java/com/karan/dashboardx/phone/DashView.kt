@@ -10,6 +10,7 @@ import com.karan.dashboardx.DashRuntime
 import com.karan.dashboardx.car.FrameFailureLog
 import com.karan.dashboardx.data.Style
 import com.karan.dashboardx.render.Fonts
+import com.karan.dashboardx.render.FrameModel
 import com.karan.dashboardx.render.GaugeRenderer
 import com.karan.dashboardx.render.Viewport
 import com.karan.dashboardx.render.rendererFor
@@ -20,6 +21,9 @@ class DashView(ctx: Context) : View(ctx) {
     private var style: Style? = null
     private var renderer: GaugeRenderer? = null
     private var vp = Viewport.fit(0, 0, 1, 1)
+
+    /** Called on the UI thread with each frame's model, before it is drawn (the engine sound feed). */
+    var onFrame: ((FrameModel) -> Unit)? = null
 
     private val slop = ViewConfiguration.get(ctx).scaledTouchSlop
     private var downX = 0f
@@ -72,6 +76,7 @@ class DashView(ctx: Context) : View(ctx) {
             val r = renderer?.takeIf { style == s } ?: rendererFor(s, fonts).also { renderer = it; style = s }
             // Wall clock: CarState readings are stamped with System.currentTimeMillis().
             val f = DashRuntime.frame(System.currentTimeMillis())
+            onFrame?.invoke(f)
             c.translate(vp.dx, vp.dy)
             c.scale(vp.scale, vp.scale)
             c.clipRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H)

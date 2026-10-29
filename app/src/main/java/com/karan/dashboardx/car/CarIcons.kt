@@ -20,7 +20,14 @@ internal object CarIcons {
     val soundOn: CarIcon by lazy { icon { c, p -> drawSpeaker(c, p); drawWaves(c, p) } }
     val soundOff: CarIcon by lazy { icon { c, p -> drawSpeaker(c, p); drawCross(c, p) } }
 
-    private fun icon(draw: (Canvas, Paint) -> Unit): CarIcon {
+    /** The same speaker glyphs as plain bitmaps, for the phone's Sound button. */
+    val soundOnBitmap: Bitmap by lazy { bitmap { c, p -> drawSpeaker(c, p); drawWaves(c, p) } }
+    val soundOffBitmap: Bitmap by lazy { bitmap { c, p -> drawSpeaker(c, p); drawCross(c, p) } }
+
+    private fun icon(draw: (Canvas, Paint) -> Unit): CarIcon =
+        CarIcon.Builder(IconCompat.createWithBitmap(bitmap(draw))).build()
+
+    private fun bitmap(draw: (Canvas, Paint) -> Unit): Bitmap {
         val bmp = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
@@ -28,7 +35,7 @@ internal object CarIcons {
             strokeJoin = Paint.Join.ROUND
         }
         draw(Canvas(bmp), paint)
-        return CarIcon.Builder(IconCompat.createWithBitmap(bmp)).build()
+        return bmp
     }
 
     /** A gauge: 270° arc, needle and hub. */
