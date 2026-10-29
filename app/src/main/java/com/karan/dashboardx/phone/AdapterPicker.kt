@@ -50,6 +50,8 @@ class AdapterPicker(private val activity: Activity, private val onPicked: () -> 
     private var scanning = false
     private var scanCallback: ScanCallback? = null
     private var scanAdapter: BluetoothAdapter? = null
+    /** Worked out once per scan and appended to every scan status message ("" when none). */
+    private var scanNote = ""
     private val stopRunnable = Runnable { finishScan() }
 
     private val btAdapter: BluetoothAdapter?
@@ -86,6 +88,14 @@ class AdapterPicker(private val activity: Activity, private val onPicked: () -> 
             proceed()
         }
         return true
+    }
+
+    /** Host paused: stop scanning but keep the dialog (and its results) open. */
+    fun pause() {
+        if (!scanning) return
+        val n = entries.count { it.isBle }
+        stopScan()
+        statusView?.text = withNote("Scan stopped: $n BLE device(s) found. Tap Choose again to rescan.")
     }
 
     fun dispose() {
@@ -222,9 +232,14 @@ class AdapterPicker(private val activity: Activity, private val onPicked: () -> 
             "Showing paired devices only."
 
     private fun startScan(adapter: BluetoothAdapter) {
+        scanNote = if (sdk <= 30 && !locationOn()) {
+            "\nLocation is off, so Android may report no BLE devices. Turn it on and tap Choose again."
+        } else {
+            ""
+        }
         val scanner = adapter.bluetoothLeScanner
         if (scanner == null) {
-            statusView?.text = "BLE scan unavailable right now. Showing paired devices only."
+            statusView?.text = withNote("BLE scan unavailable right now. Showing paired devices only.")
             return
         }
         val cb = object : ScanCallback() {
@@ -234,7 +249,7 @@ class AdapterPicker(private val activity: Activity, private val onPicked: () -> 
                 main.post {
                     scanning = false
                     main.removeCallbacks(stopRunnable)
-                    statusView?.text = "BLE scan failed (error $errorCode). Showing paired devices."
+                    statusView?.text = withNote("BLE scan failed (error $errorCode). Showing paired devices.")
                 }
             }
         }
@@ -242,16 +257,14 @@ class AdapterPicker(private val activity: Activity, private val onPicked: () -> 
         try {
             scanner.startScan(null, settings, cb)
         } catch (e: Exception) { // SecurityException, or IllegalStateException if Bluetooth just went off
-            statusView?.text = "BLE scan could not start (${e.javaClass.simpleName}). Showing paired devices."
+            statusView?.text = withNote("BLE scan could not start (${e.javaClass.simpleName}). Showing paired devices.")
             return
         }
         scanCallback = cb
         scanAdapter = adapter
         scanning = true
         main.postDelayed(stopRunnable, SCAN_MS)
-        var msg = "Scanning for BLE adapters (8 s)…"
-        if (sdk <= 30 && !locationOn()) msg += "\nLocation is off, so Android may report no BLE devices. Turn it on and tap Choose again."
-        statusView?.text = msg
+        statusView?.text = withNote("Scanning for BLE adapters (8 s)…")
     }
 
     private fun found(r: ScanResult) {
@@ -271,8 +284,10 @@ class AdapterPicker(private val activity: Activity, private val onPicked: () -> 
     private fun finishScan() {
         val n = entries.count { it.isBle }
         stopScan()
-        statusView?.text = "Scan finished: $n BLE device(s) found. Tap one to use it."
+        statusView?.text = withNote("Scan finished: $n BLE device(s) found. Tap one to use it.")
     }
+
+    private fun withNote(msg: String) = msg + scanNote
 
     private fun stopScan() {
         main.removeCallbacks(stopRunnable)

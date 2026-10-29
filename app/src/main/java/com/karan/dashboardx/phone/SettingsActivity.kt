@@ -50,6 +50,7 @@ class SettingsActivity : Activity() {
 
     override fun onPause() {
         fields.forEach { it.commit() } // keep a typed-but-not-confirmed valid value
+        picker.pause() // no BLE scan while this screen is not in front
         super.onPause()
     }
 
@@ -138,10 +139,11 @@ class SettingsActivity : Activity() {
                     showVol(p)
                     if (fromUser) settings.soundVolume = p / 100f // the synth re-reads it live
                 }
-                override fun onStartTrackingTouch(sb: SeekBar) {}
+                private var dragStart = -1
+                override fun onStartTrackingTouch(sb: SeekBar) { dragStart = sb.progress }
                 override fun onStopTrackingTouch(sb: SeekBar) {
                     settings.soundVolume = sb.progress / 100f
-                    changed("sound volume ${sb.progress}%")
+                    if (sb.progress != dragStart) changed("sound volume ${sb.progress}%")
                 }
             })
         }
