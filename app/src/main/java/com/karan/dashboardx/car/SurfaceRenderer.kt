@@ -157,21 +157,30 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
             failureLog.failure("lockHardwareCanvas", e)
             return
         }
+        var drew = false
         try {
-            // Wall clock: CarState readings are stamped with System.currentTimeMillis().
-            val f = DashRuntime.frame(System.currentTimeMillis())
-            onFrame?.invoke(f)
             canvas.drawColor(Color.BLACK)
             val save = canvas.save()
-            canvas.translate(vp.dx, vp.dy)
-            canvas.scale(vp.scale, vp.scale)
-            canvas.clipRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H)
-            r.draw(canvas, f)
-            canvas.restoreToCount(save)
+            try {
+                // Wall clock: CarState readings are stamped with System.currentTimeMillis().
+                val f = DashRuntime.frame(System.currentTimeMillis())
+                onFrame?.invoke(f)
+                canvas.translate(vp.dx, vp.dy)
+                canvas.scale(vp.scale, vp.scale)
+                canvas.clipRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H)
+                r.draw(canvas, f)
+                drew = true
+            } catch (e: Exception) {
+                // A bug in one frame must not kill the render thread; log it (rate-limited) and
+                // post the black frame so lock/unlock stay balanced. The next frame retries.
+                failureLog.failure("draw", e)
+            } finally {
+                canvas.restoreToCount(save)
+            }
         } finally {
             try {
                 s.unlockCanvasAndPost(canvas)
-                failureLog.success()
+                if (drew) failureLog.success()
             } catch (e: IllegalArgumentException) {
                 failureLog.failure("unlockCanvasAndPost", e)
             } catch (e: IllegalStateException) {

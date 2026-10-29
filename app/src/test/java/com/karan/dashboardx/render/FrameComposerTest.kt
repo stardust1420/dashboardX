@@ -6,6 +6,7 @@ import com.karan.dashboardx.data.ConnectionStatus
 import com.karan.dashboardx.data.Pid
 import com.karan.dashboardx.data.Reading
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -71,5 +72,45 @@ class FrameComposerTest {
         assertEquals(6200, f.redline)
         assertEquals(0.0, f.tSec, 1e-9)
         assertEquals(1.5, c.at(st, 1500).tSec, 1e-9)
+    }
+
+    @Test
+    fun noCarData_afterThreeSecondsConnectedWithoutRpm() {
+        val c = FrameComposer()
+        val empty = CarState()
+        assertFalse(c.at(empty, 0).noCarData)
+        assertFalse(c.at(empty, 3000).noCarData)
+        assertTrue(c.at(empty, 3001).noCarData)
+    }
+
+    @Test
+    fun noCarData_clearsAsSoonAsRpmReturns() {
+        val c = FrameComposer()
+        c.at(CarState(), 0)
+        assertTrue(c.at(CarState(), 5000).noCarData)
+        assertFalse(c.at(state(5000, Pid.RPM to 800.0), 5000).noCarData)
+    }
+
+    @Test
+    fun noCarData_countsFromWhenRpmWentStale() {
+        val c = FrameComposer()
+        val st = state(0, Pid.RPM to 800.0)
+        assertFalse(c.at(st, 3000).noCarData) // still fresh
+        assertFalse(c.at(st, 3001).noCarData) // stale from here
+        assertFalse(c.at(st, 6001).noCarData)
+        assertTrue(c.at(st, 6002).noCarData)
+    }
+
+    @Test
+    fun noCarData_onlyWhenConnected() {
+        val c = FrameComposer()
+        for (s in ConnectionStatus.entries.filter { it != ConnectionStatus.CONNECTED }) {
+            c.compose(CarState(), s, 6200, 105, 0)
+            assertFalse("$s", c.compose(CarState(), s, 6200, 105, 10_000).noCarData)
+        }
+        // Timer starts when CONNECTED is first seen, not before.
+        assertFalse(c.at(CarState(), 10_000).noCarData)
+        assertFalse(c.at(CarState(), 13_000).noCarData)
+        assertTrue(c.at(CarState(), 13_001).noCarData)
     }
 }

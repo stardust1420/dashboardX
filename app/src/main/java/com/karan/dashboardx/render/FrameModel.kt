@@ -22,4 +22,6 @@ data class FrameModel(
     val warnings: Set<Warning>,
     val redline: Int,
     val tSec: Double,
+    /** CONNECTED but no fresh rpm for more than 3 s: the overlay hints that the engine may be off. */
+    val noCarData: Boolean = false,
 )

@@ -17,6 +17,7 @@ class FrameComposer(private val warnings: Warnings = Warnings()) {
     private var hasLast = false
     private var lastMs = 0L
     private var t0Ms = 0L
+    private var noRpmSinceMs = -1L // first frame of the current CONNECTED-without-rpm run; -1 = none
 
     /** Warnings that should chime as a result of the most recent [compose] call. */
     var chime: Set<Warning> = emptySet()
@@ -34,6 +35,14 @@ class FrameComposer(private val warnings: Warnings = Warnings()) {
         speedS.target(st.value(Pid.SPEED, nowMs))
         thrS.target(st.value(Pid.THROTTLE, nowMs))
 
+        val noCarData = if (status != ConnectionStatus.CONNECTED || rawRpm != null) {
+            noRpmSinceMs = -1L
+            false
+        } else {
+            if (noRpmSinceMs < 0) noRpmSinceMs = nowMs
+            nowMs - noRpmSinceMs > NO_DATA_HINT_MS
+        }
+
         val w = warnings.evaluate(coolant, rawRpm, redline, coolantWarn, nowMs)
         chime = w.chime
         return FrameModel(
@@ -50,10 +59,13 @@ class FrameComposer(private val warnings: Warnings = Warnings()) {
             warnings = w.active,
             redline = redline,
             tSec = (nowMs - t0Ms) / 1000.0,
+            noCarData = noCarData,
         )
     }
 
     companion object {
         const val MAX_DT_MS = 100L
+        /** How long CONNECTED may go without a fresh rpm before [FrameModel.noCarData] is set. */
+        const val NO_DATA_HINT_MS = 3000L
     }
 }

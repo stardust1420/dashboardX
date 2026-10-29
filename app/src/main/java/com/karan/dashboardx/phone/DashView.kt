@@ -7,6 +7,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import com.karan.dashboardx.DashRuntime
+import com.karan.dashboardx.car.FrameFailureLog
 import com.karan.dashboardx.data.Style
 import com.karan.dashboardx.render.Fonts
 import com.karan.dashboardx.render.GaugeRenderer
@@ -23,6 +24,7 @@ class DashView(ctx: Context) : View(ctx) {
     private val slop = ViewConfiguration.get(ctx).scaledTouchSlop
     private var downX = 0f
     private var downY = 0f
+    private val failureLog = FrameFailureLog { DashRuntime.diag.add(it.replaceFirst("car:", "phone:")) } // UI thread only
 
     init {
         DashRuntime.init(ctx)
@@ -64,16 +66,23 @@ class DashView(ctx: Context) : View(ctx) {
 
     override fun onDraw(c: Canvas) {
         super.onDraw(c)
-        val s = DashRuntime.settings.style
-        val r = renderer?.takeIf { style == s } ?: rendererFor(s, fonts).also { renderer = it; style = s }
-        // Wall clock: CarState readings are stamped with System.currentTimeMillis().
-        val f = DashRuntime.frame(System.currentTimeMillis())
         val save = c.save()
-        c.translate(vp.dx, vp.dy)
-        c.scale(vp.scale, vp.scale)
-        c.clipRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H)
-        r.draw(c, f)
-        c.restoreToCount(save)
+        try {
+            val s = DashRuntime.settings.style
+            val r = renderer?.takeIf { style == s } ?: rendererFor(s, fonts).also { renderer = it; style = s }
+            // Wall clock: CarState readings are stamped with System.currentTimeMillis().
+            val f = DashRuntime.frame(System.currentTimeMillis())
+            c.translate(vp.dx, vp.dy)
+            c.scale(vp.scale, vp.scale)
+            c.clipRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H)
+            r.draw(c, f)
+            failureLog.success()
+        } catch (e: Exception) {
+            // Keep the UI alive: log (rate-limited) and try again next frame.
+            failureLog.failure("draw", e)
+        } finally {
+            c.restoreToCount(save)
+        }
         if (isAttachedToWindow) postInvalidateOnAnimation()
     }
 }
