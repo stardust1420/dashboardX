@@ -45,6 +45,7 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
 
     @Volatile private var started = false
     private var looping = false // render thread only
+    private val failureLog = FrameFailureLog(DashRuntime.diag::add) // render thread only
 
     private val frame = object : Runnable {
         override fun run() {
@@ -141,11 +142,15 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
         val st = style
         val r = renderers.getOrPut(st) { rendererFor(st, fonts) }
         val vp = viewport
+        // Lock/unlock fail when the surface is destroyed mid-frame; failures are logged
+        // (rate-limited) so a persistently black car screen is diagnosable, then retried next frame.
         val canvas = try {
             s.lockHardwareCanvas()
         } catch (e: IllegalArgumentException) {
-            return // surface went away between the check and the lock
+            failureLog.failure("lockHardwareCanvas", e)
+            return
         } catch (e: IllegalStateException) {
+            failureLog.failure("lockHardwareCanvas", e)
             return
         }
         try {
@@ -161,9 +166,11 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
         } finally {
             try {
                 s.unlockCanvasAndPost(canvas)
+                failureLog.success()
             } catch (e: IllegalArgumentException) {
-                // surface destroyed mid-frame; the next frame sees surface == null or invalid
+                failureLog.failure("unlockCanvasAndPost", e)
             } catch (e: IllegalStateException) {
+                failureLog.failure("unlockCanvasAndPost", e)
             }
         }
     }
