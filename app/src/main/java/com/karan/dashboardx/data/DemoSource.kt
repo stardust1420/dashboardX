@@ -27,9 +27,18 @@ class DemoSource(private val clock: () -> Long = System::currentTimeMillis) : Da
     /** Smoothing factor [k] defined per 60 fps frame, rescaled to the elapsed time. */
     private fun alpha(k: Double, dt: Double) = 1.0 - (1.0 - k).pow(dt * 60.0)
 
-    /** Advances the simulation to [tSec] and returns the state. Deterministic for a given call sequence. */
+    private fun reset() {
+        rpm = 850.0; speed = 0.0; thr = 0.0; lastT = null
+    }
+
+    /**
+     * Advances the simulation to [tSec] and returns the state. Stateful (smoothing needs history):
+     * deterministic for a given sequence of calls; t must increase, and a t lower than the
+     * previous call resets the simulation state.
+     */
     fun stepAt(tSec: Double): CarState {
         val t = tSec
+        if (lastT?.let { t < it } == true) reset()
         val dt = lastT?.let { max(0.0, t - it) } ?: (1.0 / 60.0)
         lastT = t
         val ph = t % 16.0
@@ -72,6 +81,7 @@ class DemoSource(private val clock: () -> Long = System::currentTimeMillis) : Da
 
     override fun start(scope: CoroutineScope) {
         if (job?.isActive == true) return
+        reset()
         _status.value = ConnectionStatus.DEMO
         val t0 = clock()
         job = scope.launch {
