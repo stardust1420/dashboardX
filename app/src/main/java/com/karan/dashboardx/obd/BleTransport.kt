@@ -89,7 +89,13 @@ class BleTransport(
 
     override suspend fun open() {
         val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-        val adapter = mgr?.adapter ?: throw IOException("Bluetooth unavailable")
+        val adapter = mgr?.adapter ?: throw IOException("Bluetooth is off (no adapter)")
+        val on = try {
+            adapter.isEnabled
+        } catch (e: SecurityException) {
+            throw IOException("Bluetooth permission missing")
+        }
+        if (!on) throw IOException("Bluetooth is off")
         val device = try {
             adapter.getRemoteDevice(address)
         } catch (e: IllegalArgumentException) {
@@ -152,7 +158,7 @@ class BleTransport(
         return null
     }
 
-    override suspend fun send(cmd: String): String {
+    override suspend fun send(cmd: String, timeoutMs: Long): String {
         val g = gatt ?: throw IOException("not open")
         val w = writeChar ?: throw IOException("not open")
         disconnected?.let { throw it }
@@ -184,7 +190,7 @@ class BleTransport(
             }
             val sb = StringBuilder()
             try {
-                withTimeout(TIMEOUT_MS) {
+                withTimeout(timeoutMs) {
                     while (true) {
                         val part = rx.receiveCatching().getOrNull()
                             ?: throw (disconnected ?: IOException("BLE stream ended"))
@@ -221,7 +227,6 @@ class BleTransport(
     }
 
     private companion object {
-        const val TIMEOUT_MS = 2000L
         val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         val FFE0: UUID = UUID.fromString("0000ffe0-0000-1000-8000-00805f9b34fb")
         val FFE1: UUID = UUID.fromString("0000ffe1-0000-1000-8000-00805f9b34fb")

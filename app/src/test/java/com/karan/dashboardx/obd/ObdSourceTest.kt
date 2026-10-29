@@ -21,8 +21,8 @@ class ObdSourceTest {
         "010F" to "410F4B", "0111" to "41117F", "010B" to "410B22", "0104" to "410440",
     )
 
-    private fun source(disp: kotlinx.coroutines.CoroutineDispatcher, now: () -> Long, factory: () -> ObdTransport) =
-        ObdSource(factory, com.karan.dashboardx.settings.Settings(FakePrefs()), DiagLog(), now, { 1000L }, disp)
+    private fun source(disp: kotlinx.coroutines.CoroutineDispatcher, now: () -> Long, log: DiagLog = DiagLog(), factory: () -> ObdTransport) =
+        ObdSource(factory, com.karan.dashboardx.settings.Settings(FakePrefs()), log, now, { 1000L }, disp)
 
     @Test
     fun source_publishesValues() = runTest {
@@ -89,7 +89,7 @@ class ObdSourceTest {
         val src = source(d, { testScheduler.currentTime }) {
             if (n++ == 0) object : ObdTransport {
                 override suspend fun open() { throw SecurityException("no bt permission") }
-                override suspend fun send(cmd: String): String = ""
+                override suspend fun send(cmd: String, timeoutMs: Long): String = ""
                 override fun close() {}
             } else FakeTransport(script)
         }
@@ -120,6 +120,48 @@ class ObdSourceTest {
         advanceTimeBy(500)
         assertEquals(ConnectionStatus.RECONNECTING, src.status.value)
         assertEquals(null, src.state.value.instantKml)
+        src.stop()
+    }
+
+    @Test
+    fun source_retriesProbeOnSameLinkWhenCarIsOff() = runTest {
+        val d = StandardTestDispatcher(testScheduler)
+        val made = mutableListOf<FakeTransport>()
+        val log = DiagLog()
+        val src = source(d, { testScheduler.currentTime }, log) {
+            FakeTransport(script, sequences = mapOf("0100" to listOf("NO DATA", "UNABLE TO CONNECT", "NO DATA")))
+                .also { made += it }
+        }
+        src.start(backgroundScope)
+        advanceTimeBy(5_000) // init + first retry at 3 s, both fail
+        assertEquals(1, made.size)
+        assertTrue(src.status.value != ConnectionStatus.CONNECTED)
+        advanceTimeBy(5_000) // third probe fails at 6 s, fourth (9 s) answers
+        assertEquals(ConnectionStatus.CONNECTED, src.status.value)
+        assertEquals(1, made.size)
+        assertEquals(1, made[0].sent.count { it == "ATZ" })
+        assertEquals(4, made[0].sent.count { it == "0100" })
+        assertTrue(log.lines().joinToString("\n"), log.lines().any { "retrying 0100" in it })
+        src.stop()
+    }
+
+    @Test
+    fun source_dropsLinkAfterFiveFailedProbeRetries() = runTest {
+        val d = StandardTestDispatcher(testScheduler)
+        val made = mutableListOf<FakeTransport>()
+        val src = source(d, { testScheduler.currentTime }) {
+            FakeTransport(script + ("0100" to "NO DATA")).also { made += it }
+        }
+        src.start(backgroundScope)
+        advanceTimeBy(14_000) // init at 0 s, retries at 3, 6, 9, 12 s
+        assertEquals(1, made.size)
+        assertTrue(!made[0].closed)
+        advanceTimeBy(2_000) // fifth retry at 15 s fails; link closed, 1 s backoff
+        assertTrue(made[0].closed)
+        assertEquals(6, made[0].sent.count { it == "0100" })
+        assertEquals(ConnectionStatus.RECONNECTING, src.status.value)
+        advanceTimeBy(1_000)
+        assertEquals(2, made.size)
         src.stop()
     }
 }

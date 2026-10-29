@@ -27,6 +27,7 @@ class ObdSource(
     private val clock: () -> Long = System::currentTimeMillis,
     private val backoffMs: (attempt: Int) -> Long = { minOf(10_000L, 1000L shl it) },
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val probeRetryMs: Long = PROBE_RETRY_MS,
 ) : DataSource {
     private val _state = MutableStateFlow(CarState())
     private val _status = MutableStateFlow(ConnectionStatus.IDLE_NEEDS_SETUP)
@@ -58,8 +59,8 @@ class ObdSource(
             try {
                 t = transportFactory()
                 t.open()
-                val elm = Elm327(t, log)
-                val supported = elm.init()
+                val elm = Elm327(t, log, clock)
+                val supported = initWithRetry(elm)
                 _state.value = _state.value.copy(unsupported = Pid.entries.toSet() - supported)
                 setStatus(ConnectionStatus.CONNECTED)
                 attempt = 0
@@ -71,6 +72,7 @@ class ObdSource(
                         _state.value = _state.value.let { it.copy(readings = it.readings + (pid to Reading(v, now))) }
                     }
                     cycle++
+                    elm.endCycle()
                     lastCycleMs = updateFuel(trip, lastCycleMs)
                     delay(1) // yield between cycles; real latency comes from the adapter
                 }
@@ -92,6 +94,29 @@ class ObdSource(
             log.add("reconnect in ${wait}ms")
             delay(wait)
         }
+    }
+
+    /**
+     * Runs [Elm327.init]. If the car does not answer (ignition off, UNABLE TO CONNECT), re-asks
+     * 0100 on the same link every [probeRetryMs], up to [PROBE_RETRIES] times, before giving up
+     * and letting the caller drop the Bluetooth link. IOExceptions propagate unchanged.
+     */
+    private suspend fun initWithRetry(elm: Elm327): Set<Pid> {
+        var last = try {
+            return elm.init()
+        } catch (e: RetryableObdException) {
+            e
+        }
+        for (i in 1..PROBE_RETRIES) {
+            log.add("init: ${last.message}; retrying 0100 on this link in ${probeRetryMs}ms ($i/$PROBE_RETRIES)")
+            delay(probeRetryMs)
+            last = try {
+                return elm.probe()
+            } catch (e: RetryableObdException) {
+                e
+            }
+        }
+        throw last
     }
 
     /** Computes instant/trip economy from fresh readings; returns this cycle's timestamp. */
@@ -123,5 +148,10 @@ class ObdSource(
         job = null
         _state.value = _state.value.copy(instantKml = null)
         synchronized(statusLock) { _status.value = ConnectionStatus.IDLE_NEEDS_SETUP }
+    }
+
+    private companion object {
+        const val PROBE_RETRY_MS = 3000L
+        const val PROBE_RETRIES = 5
     }
 }

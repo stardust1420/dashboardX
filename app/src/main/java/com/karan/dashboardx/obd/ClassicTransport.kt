@@ -27,7 +27,13 @@ class ClassicTransport(
     private var output: OutputStream? = null
 
     override suspend fun open() {
-        val bt = adapter ?: throw IOException("Bluetooth unavailable")
+        val bt = adapter ?: throw IOException("Bluetooth is off (no adapter)")
+        val on = try {
+            bt.isEnabled
+        } catch (e: SecurityException) {
+            throw IOException("Bluetooth permission missing")
+        }
+        if (!on) throw IOException("Bluetooth is off")
         val device = try {
             bt.getRemoteDevice(address)
         } catch (e: IllegalArgumentException) {
@@ -35,7 +41,7 @@ class ClassicTransport(
         }
         coroutineScope {
             val worker = async(Dispatchers.IO) {
-                bt.cancelDiscovery()
+                runCatching { bt.cancelDiscovery() } // needs BLUETOOTH_SCAN on some builds; best effort
                 var s = device.createRfcommSocketToServiceRecord(SPP_UUID)
                 socket = s
                 try {
@@ -62,7 +68,7 @@ class ClassicTransport(
         }
     }
 
-    override suspend fun send(cmd: String): String {
+    override suspend fun send(cmd: String, timeoutMs: Long): String {
         val inp = input ?: throw IOException("not open")
         val out = output ?: throw IOException("not open")
         try {
@@ -72,7 +78,7 @@ class ClassicTransport(
             out.flush()
             val sb = StringBuilder()
             val buf = ByteArray(256)
-            val deadline = clock() + TIMEOUT_MS
+            val deadline = clock() + timeoutMs
             while (true) {
                 currentCoroutineContext().ensureActive()
                 val n = inp.available()
@@ -104,6 +110,5 @@ class ClassicTransport(
 
     private companion object {
         val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-        const val TIMEOUT_MS = 2000L
     }
 }
