@@ -4,7 +4,7 @@
     <application
         android:allowBackup="false"
         android:label="DashboardX"
-        android:theme="@style/Theme.Material.Light.NoActionBar">
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:name=".phone.MainActivity"
             android:exported="true">
