@@ -60,7 +60,8 @@ class DemoSource(private val clock: () -> Long = System::currentTimeMillis) : Da
         val oil = 97 + 4 * sin(t / 11)
         val iat = 36 + sin(t / 7)
         val fuel = 0.25 + thr * 0.09 + rpm / 2500
-        val kml = if (thr < 2 && speed > 10) 99.0 else if (speed < 3) 0.0 else min(40.0, speed / (fuel * 3))
+        // Same conventions as FuelEconomy.instantKml: coasting = infinity, near standstill = unknown.
+        val kml = if (thr < 2 && speed > 10) Double.POSITIVE_INFINITY else if (speed < 3) null else min(40.0, speed / (fuel * 3))
         val now = clock()
         fun r(v: Double) = Reading(v, now)
         return CarState(
