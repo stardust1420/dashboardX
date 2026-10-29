@@ -24,7 +24,9 @@ import com.karan.dashboardx.DashRuntime
 
 /**
  * Phone settings, built in code. Every change saves to [com.karan.dashboardx.settings.Settings]
- * at once and calls [DashRuntime.restart]. Number fields validate on IME Done, on focus loss and
+ * at once. Only the adapter choice (in [AdapterPicker]) and the Demo switch call
+ * [DashRuntime.restart]; every other change calls [DashRuntime.reloadSettings], which keeps the
+ * OBD link and the trip average. Number fields validate on IME Done, on focus loss and
  * when the screen is left; invalid input shows an error and is not saved.
  */
 class SettingsActivity : Activity() {
@@ -78,9 +80,10 @@ class SettingsActivity : Activity() {
         if (demoSwitch.isChecked != s.demoMode) demoSwitch.isChecked = s.demoMode
     }
 
-    private fun changed(what: String) {
+    /** Logs and applies a change. [restart] only for a change of data source (Demo switch). */
+    private fun changed(what: String, restart: Boolean = false) {
         DashRuntime.diag.add("settings: $what")
-        DashRuntime.restart(this)
+        if (restart) DashRuntime.restart(this) else DashRuntime.reloadSettings(this)
     }
 
     private fun buildUi(): View {
@@ -121,7 +124,7 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, on ->
                 if (on != settings.demoMode) {
                     settings.demoMode = on
-                    changed("demo mode ${if (on) "on" else "off"}")
+                    changed("demo mode ${if (on) "on" else "off"}", restart = true)
                 }
             }
         }

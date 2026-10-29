@@ -42,7 +42,7 @@ fun chooseSource(demoMode: Boolean, adapterAddress: String?, connectPermission: 
 /**
  * Process-wide hub: owns the data source (demo or OBD) that the phone and car screens observe.
  * Ref-counted: the source starts on the first [acquire] and stops on the last [release].
- * [acquire], [release], [restart] and [init] are main-thread only; [frame] may be called from any
+ * [acquire], [release], [restart], [reloadSettings] and [init] are main-thread only; [frame] may be called from any
  * render thread.
  */
 object DashRuntime {
@@ -97,7 +97,20 @@ object DashRuntime {
         if (refs == 0) stopSource()
     }
 
-    /** Re-reads settings; restarts the source if anyone holds the runtime. */
+    /**
+     * Re-reads the settings the frame builder caches (redline, coolant warning) without touching
+     * the data source, so the OBD link and the trip average survive. Calibration and displacement
+     * are read live by ObdSource and volume by the sound controller, so they need nothing here.
+     */
+    fun reloadSettings(ctx: Context) {
+        init(ctx)
+        loadThresholds()
+    }
+
+    /**
+     * Stops and restarts the data source (new link, trip average reset). Only for changes that
+     * pick a different source: the adapter choice and the Demo switch.
+     */
     fun restart(ctx: Context) {
         init(ctx)
         if (refs > 0) {
