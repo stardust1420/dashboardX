@@ -41,7 +41,7 @@ class Elm327(
     }
 
     /**
-     * Asks the car for its supported PIDs (0100/0120/0140). The first 0100 after ATSP0 makes the
+     * Asks the car for its supported PIDs (0100/0120/0140, then 0160..01A0 while advertised). The first 0100 after ATSP0 makes the
      * adapter search for the protocol, which can take several seconds, hence the long timeout.
      * Throws [RetryableObdException] if the car doesn't answer (ignition off, UNABLE TO CONNECT).
      */
@@ -51,6 +51,13 @@ class Elm327(
         if (nums.isEmpty()) throw RetryableObdException("0100 gave no supported PIDs: ${PidCodec.cleanReply(r0)}")
         nums += PidCodec.parseSupported(cmd("0120", PROBE_TIMEOUT_MS), 0x20)
         nums += PidCodec.parseSupported(cmd("0140", PROBE_TIMEOUT_MS), 0x40)
+        // Not polled: only logged, to learn whether this car reports its gear (PID A4) directly.
+        // Each range is asked for only if the previous one advertises it, so most cars add nothing.
+        for (base in listOf(0x60, 0x80, 0xA0)) {
+            if (base !in nums) break
+            nums += PidCodec.parseSupported(cmd("01%02X".format(base), PROBE_TIMEOUT_MS), base)
+        }
+        log.add("gear PID A4: ${if (GEAR_PID in nums) "supported" else "not supported"}")
         val supported = Pid.entries.filter { PidCodec.codeOf(it).toInt(16) in nums }.toSet()
         log.add("supported: $supported")
         cycle = 0
@@ -106,5 +113,7 @@ class Elm327(
         const val PROBE_TIMEOUT_MS = 10_000L
         const val VERBOSE_CYCLES = 3
         const val SUMMARY_MS = 30_000L
+        /** Mode 01 "transmission actual gear" (SAE J1979). */
+        const val GEAR_PID = 0xA4
     }
 }

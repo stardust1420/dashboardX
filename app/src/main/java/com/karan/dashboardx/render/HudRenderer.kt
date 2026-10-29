@@ -27,6 +27,7 @@ class HudRenderer(private val fonts: Fonts) : GaugeRenderer {
 
         const val CX = 400f
         const val CY = 220f
+        const val GEAR_X = 585f // between the reticle and the speed tape
     }
 
     private val glow = glowRadius(8f)
@@ -53,6 +54,7 @@ class HudRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val tickText = text(20f, Paint.Align.RIGHT, C_GREEN)
     private val tickTextRed = text(20f, Paint.Align.RIGHT, C_RED)
     private val boxValue = text(30f, Paint.Align.RIGHT, C_GREEN)
+    private val gearValue = text(30f, Paint.Align.CENTER, C_GREEN)
     private val tapeLabel = text(16f, Paint.Align.CENTER, C_GREEN)
     private val thrText = text(16f, Paint.Align.CENTER, C_GREEN)
     private val shiftText = text(26f, Paint.Align.CENTER, C_RED)
@@ -62,6 +64,7 @@ class HudRenderer(private val fonts: Fonts) : GaugeRenderer {
 
     private val midTick = middleOffset(tickText)
     private val midBox = middleOffset(boxValue)
+    private val midGear = middleOffset(gearValue)
     private val midTape = middleOffset(tapeLabel)
     private val midThr = middleOffset(thrText)
     private val midShift = middleOffset(shiftText)
@@ -96,6 +99,7 @@ class HudRenderer(private val fonts: Fonts) : GaugeRenderer {
 
     private val tRpm = TextCache()
     private val tSpeed = TextCache()
+    private val tGear = TextCache()
     private val tThr = TextCache()
     private val tClt = TextCache()
     private val tOil = TextCache()
@@ -106,6 +110,7 @@ class HudRenderer(private val fonts: Fonts) : GaugeRenderer {
         c.drawRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H, bgPaint)
         tape(c, RPM_X, f.rpm, RPM_PER_UNIT, 500, "RPM", rpmLabels, f.redline.toDouble(), tRpm, rpmBox)
         tape(c, SPEED_X, f.speed, SPEED_PER_UNIT, 10, "KM/H", speedLabels, Double.MAX_VALUE, tSpeed, speedBox)
+        drawGear(c, f)
         drawReticle(c, f)
         drawReadouts(c, f)
         drawStatusOverlay(c, f, fonts)
@@ -137,6 +142,13 @@ class HudRenderer(private val fonts: Fonts) : GaugeRenderer {
         c.drawPath(box, boxStroke)
         c.drawText(cache.get(textKey(value)) { Fmt.int(value) }, x + 98, MID + 1 + midBox, boxValue)
         c.drawText(label, x + 55, TOP - 18 + midTape, tapeLabel)
+    }
+
+    private fun drawGear(c: Canvas, f: FrameModel) {
+        c.drawRect(GEAR_X - 24, MID - 22, GEAR_X + 24, MID + 22, line)
+        c.drawText("GEAR", GEAR_X, MID - 38 + midTape, tapeLabel)
+        val gear = f.gear
+        c.drawText(tGear.get(textKey(gear?.toDouble())) { Fmt.gear(gear) }, GEAR_X, MID + 1 + midGear, gearValue)
     }
 
     private fun drawReticle(c: Canvas, f: FrameModel) {

@@ -26,6 +26,8 @@ fun rendererFor(style: Style, fonts: Fonts): GaugeRenderer = when (style) {
     Style.RACING -> RacingRenderer(fonts)
     Style.HUD -> HudRenderer(fonts)
     Style.ARCADE -> ArcadeRenderer(fonts)
+    Style.LUXURY -> LuxuryRenderer(fonts)
+    Style.CLUSTER -> ClusterRenderer(fonts)
 }
 
 /** Canvas `shadowBlur` (≈ 2σ) to Android shadow-layer radius (σ = 0.57735·r + 0.5). */

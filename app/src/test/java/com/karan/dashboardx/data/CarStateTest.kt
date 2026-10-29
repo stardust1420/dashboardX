@@ -41,6 +41,8 @@ class CarStateTest {
     fun style_nextCycles() {
         assertEquals(Style.HUD, Style.RACING.next())
         assertEquals(Style.ARCADE, Style.HUD.next())
-        assertEquals(Style.RACING, Style.ARCADE.next())
+        assertEquals(Style.LUXURY, Style.ARCADE.next())
+        assertEquals(Style.CLUSTER, Style.LUXURY.next())
+        assertEquals(Style.RACING, Style.CLUSTER.next())
     }
 }

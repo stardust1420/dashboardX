@@ -20,6 +20,14 @@ class FrameComposerTest {
         compose(st, ConnectionStatus.CONNECTED, 6200, 105, nowMs)
 
     @Test
+    fun composer_estimatesGearFromRawRpmAndSpeed() {
+        val c = FrameComposer()
+        val st = state(0, Pid.RPM to 2170.0, Pid.SPEED to 50.0) // 43.4 rpm per km/h: 4th
+        assertEquals(4, c.at(st, 0).gear)
+        assertNull(c.at(state(100, Pid.RPM to 900.0, Pid.SPEED to 0.0), 100).gear)
+    }
+
+    @Test
     fun composer_staleValuesAreNull() {
         val c = FrameComposer()
         val st = state(0, Pid.COOLANT to 90.0, Pid.OIL to 95.0, Pid.RPM to 2000.0)

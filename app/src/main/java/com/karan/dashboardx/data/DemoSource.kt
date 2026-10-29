@@ -1,5 +1,6 @@
 package com.karan.dashboardx.data
 
+import com.karan.dashboardx.calc.GearEstimator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -11,7 +12,10 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
 
-/** Fake car: 9 s pull through 3 gears, cruise, idle (16 s cycle). Ported from the mockup's step(). */
+/**
+ * Fake car: 9 s pull through 3 gears, cruise, coast to idle (16 s cycle). Ported from the mockup's
+ * step(). Rpm follows speed through the gearbox ratios in [GearEstimator], so the gear display works.
+ */
 class DemoSource(private val clock: () -> Long = System::currentTimeMillis) : DataSource {
     private val _state = MutableStateFlow(CarState())
     private val _status = MutableStateFlow(ConnectionStatus.IDLE_NEEDS_SETUP)
@@ -46,16 +50,27 @@ class DemoSource(private val clock: () -> Long = System::currentTimeMillis) : Da
         val thrT: Double
         val spdT: Double
         if (ph < 9) {
-            val g = ph % 3
-            tr = 2600 + (g / 3) * 3900; thrT = 92.0; spdT = 20 + ph * 9
+            thrT = 92.0; spdT = 20 + ph * 9
         } else if (ph < 13) {
-            tr = 2300 + sin(t * 2) * 60; thrT = 24.0; spdT = 95.0
+            thrT = 24.0; spdT = 95.0
         } else {
-            tr = 850.0; thrT = 0.0; spdT = max(0.0, 95 - (ph - 13) * 40)
+            thrT = 0.0; spdT = max(0.0, 95 - (ph - 13) * 40)
         }
-        rpm += (tr - rpm) * alpha(0.12, dt)
         thr += (thrT - thr) * alpha(0.15, dt)
         speed += (spdT - speed) * alpha(0.04, dt)
+        val ratios = GearEstimator.RPM_PER_KMH
+        tr = if (ph < 9) {
+            // Upshift before 6400 rpm: the lowest gear that keeps rpm under it.
+            val g = ratios.indexOfFirst { speed * it < PULL_SHIFT_RPM }.let { if (it < 0) ratios.size - 1 else it }
+            speed * ratios[g]
+        } else if (ph < 13) {
+            speed * ratios[ratios.size - 1] + sin(t * 2) * 20
+        } else {
+            // Coasting: the highest gear that keeps rpm above 1100, never below idle.
+            val g = ratios.indexOfLast { speed * it >= COAST_DOWNSHIFT_RPM }
+            if (g < 0) IDLE_RPM else max(IDLE_RPM, speed * ratios[g])
+        }
+        rpm += (max(IDLE_RPM, tr) - rpm) * alpha(0.12, dt)
         val clt = 90 + 3 * sin(t / 9)
         val oil = 97 + 4 * sin(t / 11)
         val iat = 36 + sin(t / 7)
@@ -97,5 +112,11 @@ class DemoSource(private val clock: () -> Long = System::currentTimeMillis) : Da
         job?.cancel()
         job = null
         _status.value = ConnectionStatus.IDLE_NEEDS_SETUP
+    }
+
+    private companion object {
+        const val PULL_SHIFT_RPM = 6400.0
+        const val COAST_DOWNSHIFT_RPM = 1100.0
+        const val IDLE_RPM = 850.0
     }
 }

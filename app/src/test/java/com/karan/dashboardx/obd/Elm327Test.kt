@@ -68,6 +68,31 @@ class Elm327Test {
         assertTrue(Pid.RPM in s)
     }
 
+    /** Each range's last bit says the next range exists; the chain is followed to 01A0 for PID A4. */
+    @Test
+    fun probe_logsGearPidWhenAdvertised() = runBlocking {
+        val t = FakeTransport(mapOf(
+            "0100" to "4100BE3EB813",
+            "0140" to "414000000001",
+            "0160" to "416000000001",
+            "0180" to "418000000001",
+            "01A0" to "41A010000000", // 0xA4 = base 0xA0 + 4 -> index 3 -> first byte 0x10
+        ))
+        val log = DiagLog()
+        Elm327(t, log).probe()
+        assertEquals(listOf("0100", "0120", "0140", "0160", "0180", "01A0"), t.sent)
+        assertTrue(log.lines().any { it.endsWith("gear PID A4: supported") })
+    }
+
+    @Test
+    fun probe_stopsTheChainWhereItEnds() = runBlocking {
+        val t = FakeTransport(mapOf("0100" to "4100BE3EB813", "0140" to "414000000001", "0160" to "416000000000"))
+        val log = DiagLog()
+        Elm327(t, log).probe()
+        assertEquals(listOf("0100", "0120", "0140", "0160"), t.sent)
+        assertTrue(log.lines().any { it.endsWith("gear PID A4: not supported") })
+    }
+
     @Test
     fun log_pollTrafficOnlyForFirstThreeCyclesThenSummary() = runBlocking {
         var now = 0L

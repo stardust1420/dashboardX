@@ -63,6 +63,7 @@ class ArcadeRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val scoreLabel = text(11f, Paint.Align.RIGHT, C_YELLOW)
     private val scoreValue = text(26f, Paint.Align.RIGHT, C_WHITE)
     private val speedText = text(11f, Paint.Align.RIGHT, C_CYAN)
+    private val gearText = text(11f, Paint.Align.LEFT, C_YELLOW)
 
     // Canvas textBaseline='top' emulation (em-box top ~ ascent line).
     private fun topOffset(p: Paint): Float = -p.fontMetrics.ascent
@@ -99,6 +100,7 @@ class ArcadeRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val tThr = TextCache()
     private val tKml = TextCache()
     private val tSpeed = TextCache()
+    private val tGear = TextCache()
 
     override fun draw(c: Canvas, f: FrameModel) {
         advanceGrid(f)
@@ -184,6 +186,8 @@ class ArcadeRenderer(private val fonts: Fonts) : GaugeRenderer {
         c.drawText(tKml.get(textKey(kml, 10.0)) { Fmt.kml(kml) }, 770f, 252f + topScoreValue, scoreValue)
         val speed = f.speed
         c.drawText(tSpeed.get(textKey(speed)) { Fmt.int(speed) + " KM/H" }, 770f, 298f + topSpeed, speedText)
+        val gear = f.gear
+        c.drawText(tGear.get(textKey(gear?.toDouble())) { "GEAR " + Fmt.gear(gear) }, 612f, 298f + topSpeed, gearText)
     }
 
     private fun stat(c: Canvas, x: Float, y: Float, label: String, v: Double?, lo: Double, hi: Double, col: Int) {

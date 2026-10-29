@@ -39,7 +39,7 @@ data class CarState(
 }
 
 enum class Style {
-    RACING, HUD, ARCADE;
+    RACING, HUD, ARCADE, LUXURY, CLUSTER;
 
     fun next(): Style = entries[(ordinal + 1) % entries.size]
 }

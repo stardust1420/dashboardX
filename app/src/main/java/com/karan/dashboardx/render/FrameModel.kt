@@ -1,6 +1,7 @@
 package com.karan.dashboardx.render
 
 import com.karan.dashboardx.alerts.Warning
+import com.karan.dashboardx.calc.DriveMode
 import com.karan.dashboardx.data.ConnectionStatus
 
 /**
@@ -24,4 +25,10 @@ data class FrameModel(
     val tSec: Double,
     /** CONNECTED but no fresh rpm for more than 3 s: the overlay hints that the engine may be off. */
     val noCarData: Boolean = false,
+    /** Estimated automatic-gearbox gear (1..6), or null when it cannot be told (slow, mid-shift). */
+    val gear: Int? = null,
+    /** Inferred from recent throttle and rpm (the Verna has no mode switch to read). */
+    val driveMode: DriveMode = DriveMode.COMFORT,
+    /** Wall-clock time of the frame (for a clock display). */
+    val wallMs: Long = 0L,
 )

@@ -18,6 +18,9 @@ object Fmt {
         else -> String.format(Locale.US, "%.1f", v)
     }
 
+    /** Gear digit, or "-" when the gear cannot be told. */
+    fun gear(g: Int?): String = g?.toString() ?: "-"
+
     fun clamp01(v: Double, lo: Double, hi: Double): Double =
         ((v - lo) / (hi - lo)).coerceIn(0.0, 1.0)
 }

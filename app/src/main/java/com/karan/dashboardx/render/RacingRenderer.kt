@@ -26,6 +26,9 @@ class RacingRenderer(private val fonts: Fonts) : GaugeRenderer {
         const val LIGHTS = 15
         const val SHIFT_BAND_RPM = 2200.0 // lights start this far below the redline (mockup: 4000..6200)
         const val BAR_W = 150f
+        const val GEAR_W = 34f
+        const val GEAR_H = 36f
+        const val GEAR_GAP = 14f
 
         const val C_LABEL = 0xFF7F8A9C.toInt()
         const val C_WHITE = 0xFFFFFFFF.toInt()
@@ -73,6 +76,10 @@ class RacingRenderer(private val fonts: Fonts) : GaugeRenderer {
         setShadowLayer(glowRadius(10f), 0f, 0f, C_NEEDLE)
     }
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val gearBox = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeWidth = 2f; color = C_CYAN
+        setShadowLayer(glowRadius(8f), 0f, 0f, C_CYAN)
+    }
 
     private fun text(weight: Int, size: Float, align: Paint.Align, color: Int) =
         fonts.orbitron(Paint(Paint.ANTI_ALIAS_FLAG), weight).apply {
@@ -83,6 +90,7 @@ class RacingRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val rpmText = text(800, 54f, Paint.Align.CENTER, C_WHITE)
     private val rpmUnit = text(500, 14f, Paint.Align.CENTER, C_LABEL)
     private val speedText = text(500, 26f, Paint.Align.CENTER, C_SOFT)
+    private val gearText = text(800, 24f, Paint.Align.CENTER, C_WHITE)
     private val label = text(500, 13f, Paint.Align.LEFT, C_LABEL)
     private val value = text(800, 34f, Paint.Align.LEFT, C_WHITE)
     private val small = text(500, 14f, Paint.Align.LEFT, C_LABEL)
@@ -92,12 +100,14 @@ class RacingRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val midRpm = middleOffset(rpmText)
     private val midRpmUnit = middleOffset(rpmUnit)
     private val midSpeed = middleOffset(speedText)
+    private val midGear = middleOffset(gearText)
     private val midLabel = middleOffset(label)
     private val midValue = middleOffset(value)
     private val midSmall = middleOffset(small)
 
     private val oval = RectF(CX - R, CY - R, CX + R, CY + R)
     private val barRect = RectF()
+    private val gearRect = RectF()
 
     // Static tick geometry: 0..7000 step 500.
     private val tickCount = (TACH_MAX_RPM / 500).toInt() + 1
@@ -109,6 +119,7 @@ class RacingRenderer(private val fonts: Fonts) : GaugeRenderer {
     // ---- per-value text caches ----
     private val tRpm = TextCache()
     private val tSpeed = TextCache()
+    private val tGear = TextCache()
     private val tClt = TextCache()
     private val tOil = TextCache()
     private val tIat = TextCache()
@@ -186,7 +197,17 @@ class RacingRenderer(private val fonts: Fonts) : GaugeRenderer {
         c.drawText("RPM × 1000", CX, CY + 44 + midRpmUnit, rpmUnit)
         val speed = f.speed
         val speedStr = tSpeed.get(textKey(speed)) { Fmt.int(speed) + " km/h" }
-        c.drawText(speedStr, CX, CY + 128 + midSpeed, speedText)
+        // Speed and gear badge centred together between the tach arc's ends.
+        val speedW = speedText.measureText(speedStr)
+        val left = CX - (speedW + GEAR_GAP + GEAR_W) / 2f
+        val y = CY + 128
+        c.drawText(speedStr, left + speedW / 2f, y + midSpeed, speedText)
+        val gx = left + speedW + GEAR_GAP
+        gearRect.set(gx, y - GEAR_H / 2f, gx + GEAR_W, y + GEAR_H / 2f)
+        c.drawRoundRect(gearRect, 6f, 6f, gearBox)
+        val gear = f.gear
+        gearText.color = if (gear == null) C_LABEL else C_WHITE
+        c.drawText(tGear.get(textKey(gear?.toDouble())) { Fmt.gear(gear) }, gearRect.centerX(), y + midGear, gearText)
     }
 
     private fun drawBars(c: Canvas, f: FrameModel) {

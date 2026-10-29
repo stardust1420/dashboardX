@@ -1,5 +1,7 @@
 package com.karan.dashboardx.data
 
+import com.karan.dashboardx.calc.GearEstimator
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -45,5 +47,24 @@ class DemoSourceTest {
             i++
         }
         assertTrue("max rpm $max", max > 6200.0)
+    }
+
+    /** Rpm follows speed through the gearbox, so the estimator sees 1st-3rd in the pull and 6th cruising. */
+    @Test
+    fun demo_gearsAreRecognisable() {
+        val d = DemoSource { 0L }
+        val e = GearEstimator()
+        val seen = sortedSetOf<Int>()
+        var cruise: Int? = null
+        var i = 0
+        while (i <= 260) { // 13 s: pull, then cruise
+            val s = d.stepAt(i * 0.05)
+            val g = e.update(at(s, Pid.RPM), at(s, Pid.SPEED), i * 50L)
+            if (i * 0.05 < 9.0 && g != null) seen += g
+            if (i * 0.05 > 12.0) cruise = g
+            i++
+        }
+        assertEquals(sortedSetOf(1, 2, 3), seen)
+        assertEquals(6, cruise)
     }
 }
