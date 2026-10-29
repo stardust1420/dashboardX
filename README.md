@@ -54,7 +54,9 @@ Open DashboardX on the phone. Until you choose an adapter or turn on Demo mode, 
 
 In Demo mode a small **DEMO** tag sits in the top-left corner, so fake data is never mistaken for the car.
 
-On the phone, a tap on the dashboard (anywhere except the gear) cycles the style: Racing, HUD, Arcade.
+On the phone, a tap on the dashboard (anywhere except the buttons) cycles the style: Racing, HUD, Arcade, Luxury, Cluster.
+
+The speaker button next to the gear turns the engine sound on and off on the phone, the same way as the Sound icon in the car (see section 5). It starts **off** every time the app opens. It also switches off when you leave the app. Demo mode is a good way to try it.
 
 ## 4. Pair and choose the adapter
 
@@ -83,7 +85,7 @@ Other settings on the same screen: engine sound volume (0 to 100 %), fuel calibr
 
 Buttons on the car screen:
 The two buttons on the car screen are icons, with no text:
-- **Style** (a gauge icon: an arc with a needle and a centre dot): cycles Racing, HUD and Arcade layouts. The choice is remembered.
+- **Style** (a gauge icon: an arc with a needle and a centre dot): cycles Racing, HUD, Arcade, Luxury and Cluster layouts. The choice is remembered.
 - **Sound** (a speaker icon): a speaker with a cross means the engine sound is off, a speaker with sound waves means it is on. It starts **off** every time.
 
 The engine sound plays through the car speakers and lowers (ducks) your music instead of pausing it. When there is no RPM for about a second (engine off, adapter unplugged) it lets go and your music returns to full volume; it ducks again when RPM comes back. If the sound ever fails, the Sound icon switches back to off by itself.
@@ -113,8 +115,10 @@ The log includes the connection status, which sensors the car supports and a tim
   Example: the app says 16.0, the real figure is 14.5, and the current factor is 1.0. The new factor is 1.0 x (16.0 / 14.5) = 1.10. Enter it in Settings (range 0.5 to 1.5). A higher factor means more fuel and a lower km/l.
 
   The trip average resets only when DashboardX starts its data source: when the phone app or the car screen is opened while DashboardX was fully closed (neither showing), when you pick an adapter, or when you switch Demo mode on or off. It does **not** reset when the adapter drops out and reconnects, or when you change other settings (volume, calibration, engine size, redline, coolant warning).
+- **The drive mode is inferred.** The Luxury and Cluster styles show SPORT, COMFORT or ECO. The Verna has no mode switch to read, so it is worked out from recent throttle and RPM: a hard pull shows SPORT within a second or two, and it settles back to ECO or COMFORT several seconds after you ease off.
+- **The gear is an estimate.** The car does not report it (Diagnostics shows "gear PID A4: supported" if yours does), so it is worked out from RPM ÷ speed. It shows "-" below 8 km/h, and during a shift it holds the old gear for up to 1.5 s before changing. It slowly corrects itself if the tyres or final drive differ from the stock Verna 1.6 automatic.
 - **The engine sound is delayed** by about 0.1 to 0.2 seconds, and it starts off on every drive.
-- **The Verna throttle may idle at 10 to 18 %.** The infinity (∞) fuel economy reading and the overrun crackle sound only appear when the throttle reads near zero while moving, so they may show rarely or never on this car.
+- **The Verna throttle may idle at 10 to 18 %.** The infinity (∞) fuel economy reading only appears when the throttle reads near zero while moving, so it may show rarely or never on this car. The exhaust crackle does not depend on that: it also plays when you lift off sharply or the revs drop fast (a gear shift).
 - **Not for the Play Store.** It is a personal sideloaded app and Android Auto will only show it with Unknown sources on.
 
 ## 8. Troubleshooting
