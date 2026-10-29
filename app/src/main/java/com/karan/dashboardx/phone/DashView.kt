@@ -3,7 +3,9 @@ package com.karan.dashboardx.phone
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import com.karan.dashboardx.DashRuntime
 import com.karan.dashboardx.data.Style
 import com.karan.dashboardx.render.Fonts
@@ -18,13 +20,41 @@ class DashView(ctx: Context) : View(ctx) {
     private var renderer: GaugeRenderer? = null
     private var vp = Viewport.fit(0, 0, 1, 1)
 
+    private val slop = ViewConfiguration.get(ctx).scaledTouchSlop
+    private var downX = 0f
+    private var downY = 0f
+
     init {
         DashRuntime.init(ctx)
+        isClickable = true
+        contentDescription = "Dashboard. Tap to change style."
         setBackgroundColor(Color.BLACK)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         vp = Viewport.fit(0, 0, w, h)
+    }
+
+    override fun onTouchEvent(e: MotionEvent): Boolean {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> { downX = e.x; downY = e.y; return true }
+            MotionEvent.ACTION_UP -> {
+                val dx = e.x - downX
+                val dy = e.y - downY
+                if (dx * dx + dy * dy <= slop * slop) performClick()
+                return true
+            }
+        }
+        return super.onTouchEvent(e)
+    }
+
+    /** A tap cycles the style; onDraw swaps the renderer when [Settings.style] changes. */
+    override fun performClick(): Boolean {
+        super.performClick()
+        val st = DashRuntime.settings
+        st.style = st.style.next()
+        invalidate()
+        return true
     }
 
     override fun onAttachedToWindow() {

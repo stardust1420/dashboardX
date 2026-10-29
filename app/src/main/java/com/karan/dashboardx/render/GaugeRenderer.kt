@@ -24,8 +24,8 @@ interface GaugeRenderer {
 
 fun rendererFor(style: Style, fonts: Fonts): GaugeRenderer = when (style) {
     Style.RACING -> RacingRenderer(fonts)
-    // Task 9 adds HudRenderer and ArcadeRenderer; until then they fall back to Racing.
-    Style.HUD, Style.ARCADE -> RacingRenderer(fonts)
+    Style.HUD -> HudRenderer(fonts)
+    Style.ARCADE -> ArcadeRenderer(fonts)
 }
 
 /** Canvas `shadowBlur` (≈ 2σ) to Android shadow-layer radius (σ = 0.57735·r + 0.5). */
