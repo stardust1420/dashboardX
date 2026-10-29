@@ -41,4 +41,31 @@ class PidCodecTest {
         assertFalse(0x02 in s)
         assertFalse(0x10 in s)
     }
+
+    @Test fun decode_truncatedLineThenGood() =
+        assertEquals(1726.0, PidCodec.decode(Pid.RPM, "410C1A\r410C1AF8")!!, 1e-9)
+
+    @Test fun decode_multiEcuFirstMatchingLine() =
+        assertEquals(1726.0, PidCodec.decode(Pid.RPM, "410C1AF8\r410C0FA0")!!, 1e-9)
+
+    @Test fun decode_skipsOtherPidLines() =
+        assertEquals(60.0, PidCodec.decode(Pid.SPEED, "410C1AF8\r\n410D3C\r\r>")!!, 1e-9)
+
+    @Test fun decode_errorLineThenGood() =
+        assertEquals(1726.0, PidCodec.decode(Pid.RPM, "NO DATA\r410C1AF8")!!, 1e-9)
+
+    @Test fun parseSupported_unionsEcus() {
+        val s = PidCodec.parseSupported("4100BE1FA813\r410080000000", 0)
+        assertTrue(0x01 in s) // in both
+        assertTrue(0x0C in s) // first line only
+        assertTrue(0x20 in s)
+        val second = PidCodec.parseSupported("410080000000", 0)
+        assertEquals(setOf(0x01), second)
+        // A bit only the second line sets is kept in the union.
+        val u = PidCodec.parseSupported("410000000001\r410080000000", 0)
+        assertEquals(setOf(0x01, 0x20), u)
+    }
+
+    @Test fun parseSupported_ignoresShortAndErrorLines() =
+        assertEquals(setOf(0x01), PidCodec.parseSupported("SEARCHING...\r4100800000\rNO DATA\r410080000000", 0))
 }
