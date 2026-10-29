@@ -37,11 +37,11 @@ $ANDROID_HOME/extras/google/auto/desktop-head-unit
 
 | # | Check | Result |
 |---|-------|--------|
-| B1 | DashboardX appears in the DHU launcher and opens to the demo dashboard full screen (unconfigured runs demo) | pending — owner to run |
-| B2 | NavigationTemplate with only an action strip is accepted; Style and Sound icons render visibly | pending — owner to run |
-| B3 | Style cycles RACING, HUD, ARCADE | pending — owner to run |
+| B1 | DashboardX appears in the DHU launcher and opens full screen showing "Set up DashboardX on your phone" (unconfigured, demo off) | pending — owner to run |
+| B2 | Turn Demo mode on in phone Settings: the car shows the animated dashboard. NavigationTemplate with only an action strip is accepted; the two icon buttons (gauge icon for style, speaker icon for sound) render visibly | pending — owner to run |
+| B3 | Tapping the gauge icon cycles RACING, HUD, ARCADE | pending — owner to run |
 | B4 | Gauges are not hidden behind the action strip | pending — owner to run |
-| B5 | Sound icon flips between on and off | pending — owner to run |
+| B5 | Sound icon flips between speaker with cross (off) and speaker with waves (on) | pending — owner to run |
 | B6 | DHU `screenshot` saved for each style | pending — owner to run |
 | B7 | `adb logcat -b crash -d` is empty | pending — owner to run |
 
@@ -49,7 +49,7 @@ $ANDROID_HOME/extras/google/auto/desktop-head-unit
 
 | # | Check | Result |
 |---|-------|--------|
-| C1 | Sound icon starts **off** (crossed speaker), no engine sound | pending — owner to run |
+| C1 | Sound icon starts **off** (speaker with cross), no engine sound (Demo mode on) | pending — owner to run |
 | C2 | Tap Sound: icon changes to waves; engine sound rises and falls with the demo pulls; smooth, no clicks, zipper noise or harshness | pending — owner to run |
 | C3 | Music **ducks without pausing** | pending — owner to run |
 | C4 | Off-throttle at high rpm in the demo: occasional crackle pops | pending — owner to run |
@@ -73,7 +73,7 @@ $ANDROID_HOME/extras/google/auto/desktop-head-unit
 | D7 | Plugging the adapter back in recovers | pending — owner to run |
 | D8 | Speed matches the speedometer (small offset is normal) | pending — owner to run |
 | D9 | Idle throttle value noted (expected 10–18 %); does ∞ km/l or crackle ever show? | pending — owner to run |
-| D10 | Fuel calibration: fill to brim and restart app; drive, note trip km; refill, note litres; real km/l = km / litres; new factor = current x (TRIP AVG km/l / real km/l). Record km, litres, TRIP AVG, factor (trip average covers only connected time) | pending — owner to run |
+| D10 | Fuel calibration, one continuous connected drive, no settings changes: fill to brim, switch to Racing, drive the tank; note trip-meter km and TRIP AVG km/l; refill, note litres; real km/l = km / litres; new factor = current x (TRIP AVG / real). The average covers only the current connection and resets on reconnect or settings change. Record km, litres, TRIP AVG, factor | pending — owner to run |
 | D11 | Engine sound delay feels acceptable (about 0.1–0.2 s expected) | pending — owner to run |
 
 ## E. Diagnostics log
