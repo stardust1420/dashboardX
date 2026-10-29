@@ -9,3 +9,4 @@ aar|car-app-1.4.0.jar|https://dl.google.com/dl/android/maven2/androidx/car/app/a
 aar|core-1.13.1.jar|https://dl.google.com/dl/android/maven2/androidx/core/core/1.13.1/core-1.13.1.aar
 jar|lifecycle-common-2.6.2.jar|https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common/2.6.2/lifecycle-common-2.6.2.jar
 jar|annotation-jvm-1.8.0.jar|https://dl.google.com/dl/android/maven2/androidx/annotation/annotation-jvm/1.8.0/annotation-jvm-1.8.0.jar
+aar|versionedparcelable-1.1.1.jar|https://dl.google.com/dl/android/maven2/androidx/versionedparcelable/versionedparcelable/1.1.1/versionedparcelable-1.1.1.aar
