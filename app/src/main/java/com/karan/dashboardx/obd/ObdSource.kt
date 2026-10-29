@@ -1,5 +1,7 @@
 package com.karan.dashboardx.obd
 
+import com.karan.dashboardx.calc.FuelEconomy
+import com.karan.dashboardx.calc.TripAverage
 import com.karan.dashboardx.data.CarState
 import com.karan.dashboardx.data.ConnectionStatus
 import com.karan.dashboardx.data.DataSource
@@ -20,7 +22,7 @@ import java.io.IOException
 
 class ObdSource(
     private val transportFactory: () -> ObdTransport,
-    @Suppress("unused") private val settings: Settings,
+    private val settings: Settings,
     private val log: DiagLog,
     private val clock: () -> Long = System::currentTimeMillis,
     private val backoffMs: (attempt: Int) -> Long = { minOf(10_000L, 1000L shl it) },
@@ -33,10 +35,12 @@ class ObdSource(
 
     private var job: Job? = null
     private val statusLock = Any()
+    private var trip = TripAverage()
 
     override fun start(scope: CoroutineScope) {
         if (job?.isActive == true) return
         synchronized(statusLock) { _status.value = ConnectionStatus.CONNECTING }
+        trip = TripAverage()
         job = scope.launch(ioDispatcher) { run() }
     }
 
@@ -48,6 +52,7 @@ class ObdSource(
     private suspend fun CoroutineScope.run() {
         var attempt = 0
         var cycle = 0
+        val trip = this@ObdSource.trip
         while (isActive) {
             var t: ObdTransport? = null
             try {
@@ -58,6 +63,7 @@ class ObdSource(
                 _state.value = _state.value.copy(unsupported = Pid.entries.toSet() - supported)
                 setStatus(ConnectionStatus.CONNECTED)
                 attempt = 0
+                var lastCycleMs: Long? = null
                 while (isActive) {
                     for (pid in PollSchedule.pidsFor(cycle, supported)) {
                         val v = elm.read(pid) ?: continue
@@ -65,6 +71,7 @@ class ObdSource(
                         _state.value = _state.value.let { it.copy(readings = it.readings + (pid to Reading(v, now))) }
                     }
                     cycle++
+                    lastCycleMs = updateFuel(trip, lastCycleMs)
                     delay(1) // yield between cycles; real latency comes from the adapter
                 }
             } catch (e: CancellationException) {
@@ -84,6 +91,30 @@ class ObdSource(
             log.add("reconnect in ${wait}ms")
             delay(wait)
         }
+    }
+
+    /** Computes instant/trip economy from fresh readings; returns this cycle's timestamp. */
+    private fun updateFuel(trip: TripAverage, lastMs: Long?): Long {
+        val now = clock()
+        val st = _state.value
+        val cal = settings.fuelCalibration
+        val maf = st.value(Pid.MAF, now)
+        val mafGs = maf ?: run {
+            val map = st.value(Pid.MAP, now)
+            val rpm = st.value(Pid.RPM, now)
+            if (map != null && rpm != null) {
+                FuelEconomy.mafFromSpeedDensity(map, rpm, st.value(Pid.IAT, now) ?: 25.0, settings.displacementL)
+            } else null
+        }
+        val lph = mafGs?.let { FuelEconomy.lphFromMaf(it, cal) }
+        val speed = st.value(Pid.SPEED, now)
+        val instant = FuelEconomy.instantKml(speed, st.value(Pid.THROTTLE, now), lph)
+        if (lph != null && speed != null && lastMs != null) {
+            val dt = now - lastMs
+            if (dt in 1..2000) trip.add(speed, lph, dt)
+        }
+        _state.value = _state.value.copy(instantKml = instant, tripKml = trip.kml())
+        return now
     }
 
     override fun stop() {

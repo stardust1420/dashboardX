@@ -99,4 +99,15 @@ class ObdSourceTest {
         assertEquals(ConnectionStatus.CONNECTED, src.status.value)
         src.stop()
     }
+
+    @Test
+    fun source_computesInstantKml() = runTest {
+        val d = StandardTestDispatcher(testScheduler)
+        val maf = script + mapOf("0100" to "4100BE3FB813", "0110" to "411003E8", "010D" to "410D3C", "0111" to "411133")
+        val src = source(d, { testScheduler.currentTime }) { FakeTransport(maf) }
+        src.start(backgroundScope)
+        advanceTimeBy(500)
+        assertEquals(18.13, src.state.value.instantKml!!, 0.05)
+        src.stop()
+    }
 }
