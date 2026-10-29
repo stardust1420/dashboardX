@@ -6,6 +6,8 @@ import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.os.Handler
+import android.os.Looper
 import android.os.Process
 import com.karan.dashboardx.DashRuntime
 
@@ -17,7 +19,11 @@ import com.karan.dashboardx.DashRuntime
  *   [AudioTrack] and feeds it ~10 ms blocks from the latest [update]. Turning it off abandons focus;
  *   the thread fades out over 300 ms, then stops and releases the track and exits.
  * - A null rpm (or no [update] for [STALE_MS]) fades to silence over 300 ms, and back up when
- *   rpm returns.
+ *   rpm returns. After [IDLE_FOCUS_MS] of silence the audio focus is abandoned (music un-ducks);
+ *   it is requested again when rpm returns.
+ * - If the audio thread dies (AudioTrack write error, build failure or exception), the sound is
+ *   switched off ([enabled] becomes false), focus is abandoned, the reason is logged and
+ *   [onStateChanged] is posted to the main thread so the UI can refresh its Sound icon.
  * - Volume follows `DashRuntime.settings.soundVolume`, re-read every block.
  * - Nothing here throws to the caller; failures go to `DashRuntime.diag`.
  *
@@ -61,9 +67,19 @@ class EngineSoundController(ctx: Context) {
 
     @Volatile private var input = Input(null, null, 0L)
 
+    /** Posted to the main thread when [enabled] changes on its own (the audio thread failed). */
+    @Volatile var onStateChanged: (() -> Unit)? = null
+    private val main: Handler? = try {
+        Handler(Looper.getMainLooper())
+    } catch (e: Exception) {
+        log("main Handler failed", e)
+        null
+    }
+
     private val lock = Any()
     private var wantOn = false // guarded by lock
     private var released = false // guarded by lock
+    private var focusHeld = false // guarded by lock; we hold a focus request
     private var worker: Thread? = null // guarded by lock; non-null while the audio thread lives
     @Volatile private var stopNow = false // release(): exit without fading
 
@@ -99,7 +115,7 @@ class EngineSoundController(ctx: Context) {
                 if (released) return
                 released = true
                 stopNow = true
-                if (wantOn) abandonFocus()
+                abandonFocus()
                 wantOn = false
             }
         } catch (e: Exception) {
@@ -115,6 +131,7 @@ class EngineSoundController(ctx: Context) {
         if (am == null || req == null) return
         try {
             val r = am.requestAudioFocus(req)
+            focusHeld = true
             focusGain = if (r == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) 1f else 0f
             if (r != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) DashRuntime.diag.add("engine sound: focus denied ($r), muted")
         } catch (e: Exception) {
@@ -123,6 +140,8 @@ class EngineSoundController(ctx: Context) {
     }
 
     private fun abandonFocus() {
+        if (!focusHeld) return
+        focusHeld = false
         val am = audioManager
         val req = focusRequest
         if (am == null || req == null) return
@@ -146,6 +165,41 @@ class EngineSoundController(ctx: Context) {
 
     // --- audio thread ---
 
+    /** The audio thread is dying unexpectedly: switch off, drop focus, tell the UI. */
+    private fun fail(why: String) {
+        val wasOn: Boolean
+        synchronized(lock) {
+            worker = null
+            wasOn = wantOn
+            wantOn = false
+            abandonFocus()
+        }
+        try {
+            DashRuntime.diag.add("engine sound: $why; sound switched off")
+        } catch (e: Exception) {
+        }
+        if (wasOn) {
+            val cb = onStateChanged
+            if (cb != null) main?.post { cb() }
+        }
+    }
+
+    /** Drops focus after [IDLE_FOCUS_MS] of silence (rpm null) and takes it again when rpm returns. */
+    private fun manageIdleFocus(on: Boolean, rpmKnown: Boolean, silentForMs: Long) {
+        if (!on) return
+        synchronized(lock) {
+            if (!wantOn || released) return
+            if (rpmKnown && !focusHeld) {
+                requestFocus()
+                DashRuntime.diag.add("engine sound: rpm back, focus requested")
+            } else if (!rpmKnown && focusHeld && silentForMs >= IDLE_FOCUS_MS) {
+                abandonFocus()
+                focusGain = 0f
+                DashRuntime.diag.add("engine sound: no rpm for ${IDLE_FOCUS_MS}ms, focus abandoned")
+            }
+        }
+    }
+
     /** Whether the thread should keep going; clears [worker] atomically with the decision to exit. */
     private fun keepRunning(gain: Float): Boolean = synchronized(lock) {
         val go = !stopNow && (wantOn || gain > 0f)
@@ -163,7 +217,7 @@ class EngineSoundController(ctx: Context) {
             }
             track = buildTrack()
             if (track == null) {
-                synchronized(lock) { worker = null }
+                fail("no AudioTrack")
                 return
             }
             track.play()
@@ -173,6 +227,7 @@ class EngineSoundController(ctx: Context) {
             var gain = 0f
             var rpm = 0.0
             var throttle = 0.0
+            var silentSinceNs = -1L
             while (keepRunning(gain)) {
                 val inp = input
                 val fresh = System.nanoTime() - inp.atNs < STALE_MS * 1_000_000L
@@ -182,6 +237,14 @@ class EngineSoundController(ctx: Context) {
                     throttle = inp.throttle ?: NEUTRAL_THROTTLE
                 }
                 val on = synchronized(lock) { wantOn }
+                val now = System.nanoTime()
+                if (liveRpm == null) {
+                    if (silentSinceNs < 0) silentSinceNs = now
+                } else {
+                    silentSinceNs = -1L
+                }
+                val silentMs = if (silentSinceNs < 0) 0L else (now - silentSinceNs) / 1_000_000L
+                manageIdleFocus(on, liveRpm != null, silentMs)
                 val target = if (on && liveRpm != null) focusGain else 0f
                 synth.render(block, rpm, throttle, volume())
                 for (i in block.indices) {
@@ -194,14 +257,12 @@ class EngineSoundController(ctx: Context) {
                 }
                 val wrote = track.write(block, 0, block.size, AudioTrack.WRITE_BLOCKING)
                 if (wrote < 0) {
-                    DashRuntime.diag.add("engine sound: AudioTrack.write error $wrote; stopping")
-                    synchronized(lock) { worker = null }
+                    fail("AudioTrack.write error $wrote")
                     break
                 }
             }
         } catch (e: Exception) {
-            synchronized(lock) { worker = null }
-            log("audio thread failed", e)
+            fail("audio thread failed: ${e.javaClass.simpleName}: ${e.message}")
         } finally {
             try {
                 track?.let {
@@ -258,6 +319,8 @@ class EngineSoundController(ctx: Context) {
         const val BLOCK = 441 // 10 ms
         const val FADE_MS = 300
         const val STALE_MS = 500L
+        /** Silence (no rpm) after which the focus is handed back, so music stops ducking. */
+        const val IDLE_FOCUS_MS = 1000L
         const val DUCKED_GAIN = 0.3f
         const val DEFAULT_VOLUME = 0.7f
         /** Used when rpm is known but throttle is not: mid-load, and clear of the overrun crackle. */

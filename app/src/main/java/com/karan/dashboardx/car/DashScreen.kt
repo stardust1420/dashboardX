@@ -43,6 +43,8 @@ class DashScreen(carContext: CarContext) : Screen(carContext), DefaultLifecycleO
         renderer.style = DashRuntime.settings.style
         val controller = EngineSoundController(carContext)
         sound = controller
+        // The audio thread switched itself off (posted on the main thread): show the icon as off.
+        controller.onStateChanged = { if (sound === controller) invalidate() }
         renderer.onFrame = { f -> controller.update(f.rpm, f.throttle) }
         DashRuntime.onChime = chimeHook
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(renderer)
@@ -66,6 +68,7 @@ class DashScreen(carContext: CarContext) : Screen(carContext), DefaultLifecycleO
     override fun onDestroy(owner: LifecycleOwner) {
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(null)
         renderer.onFrame = null
+        sound?.onStateChanged = null
         sound?.release()
         sound = null
         if (DashRuntime.onChime === chimeHook) DashRuntime.onChime = null
