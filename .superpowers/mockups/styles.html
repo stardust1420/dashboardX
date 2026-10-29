@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dash Styles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;800&family=Share+Tech+Mono&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#111317; --fg:#e8eaed; --muted:#9aa0a6; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,sans-serif; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 28px; max-width:820px; }
+  .card { max-width:820px; margin:0 auto 40px; }
+  .card h2 { font-size:18px; margin:0 0 4px; }
+  .card p { color:var(--muted); margin:0 0 10px; font-size:14px; }
+  canvas { width:100%; aspect-ratio:800/480; display:block; border-radius:10px; border:1px solid #2a2d33; }
+  .wrap { max-width:820px; margin:0 auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Three looks for the car screen</h1>
+  <p class="sub">Each panel is the car display at roughly 800×480, playing fake data that simulates a pull through the gears, then cruising, then idling. Which one feels closest, and what would you change?</p>
+</div>
+
+<div class="card"><h2>A · Racing game</h2><p>Gran Turismo / Forza style: big tachometer in the middle, shift lights across the top, temperatures on the left.</p><canvas id="a" width="800" height="480"></canvas></div>
+<div class="card"><h2>B · Fighter-jet HUD</h2><p>Green vector lines and scrolling tapes, with temperatures as boxed readouts. Readable at a glance and very low-glare at night.</p><canvas id="b" width="800" height="480"></canvas></div>
+<div class="card"><h2>C · Retro arcade</h2><p>Synthwave neon with a pixel font. RPM is a power bar, temperatures are stat bars, and fuel economy is your "score".</p><canvas id="c" width="800" height="480"></canvas></div>
+
+<script>
+// ---------- fake car ----------
+const S = { rpm: 850, speed: 0, thr: 0, clt: 90, oil: 97, iat: 36, kml: 0 };
+function step(t) {
+  const ph = t % 16;
+  let tr, thrT, spdT;
+  if (ph < 9) { const g = ph % 3; tr = 2600 + (g / 3) * 3900; thrT = 92; spdT = 20 + ph * 9; }
+  else if (ph < 13) { tr = 2300 + Math.sin(t * 2) * 60; thrT = 24; spdT = 95; }
+  else { tr = 850; thrT = 0; spdT = Math.max(0, 95 - (ph - 13) * 40); }
+  S.rpm += (tr - S.rpm) * 0.12;
+  S.thr += (thrT - S.thr) * 0.15;
+  S.speed += (spdT - S.speed) * 0.04;
+  S.clt = 90 + 3 * Math.sin(t / 9);
+  S.oil = 97 + 4 * Math.sin(t / 11);
+  S.iat = 36 + Math.sin(t / 7);
+  const fuel = 0.25 + S.thr * 0.09 + S.rpm / 2500;
+  S.kml = S.thr < 2 && S.speed > 10 ? 99 : S.speed < 3 ? 0 : Math.min(40, S.speed / (fuel * 3));
+}
+const REDLINE = 6200, MAXR = 7000;
+
+function setup(id) {
+  const c = document.getElementById(id), dpr = window.devicePixelRatio || 1;
+  c.width = 800 * dpr; c.height = 480 * dpr;
+  const x = c.getContext('2d'); x.scale(dpr, dpr); return x;
+}
+function rr(x, X, Y, W, H, r) { x.beginPath(); x.roundRect(X, Y, W, H, r); }
+const kmlText = v => v >= 99 ? '∞' : v < 0.5 ? '--' : v.toFixed(1);
+
+// ---------- A: racing ----------
+const A = setup('a');
+function drawA(t) {
+  const x = A; x.clearRect(0, 0, 800, 480);
+  const bg = x.createRadialGradient(400, 290, 40, 400, 290, 480);
+  bg.addColorStop(0, '#141a24'); bg.addColorStop(1, '#05070a'); x.fillStyle = bg; x.fillRect(0, 0, 800, 480);
+
+  // shift lights
+  const lit = Math.max(0, Math.min(15, Math.round((S.rpm - 4000) / 2200 * 15)));
+  const flash = S.rpm > REDLINE && Math.floor(t * 8) % 2;
+  for (let i = 0; i < 15; i++) {
+    const on = i < lit;
+    let col = i < 5 ? '#2bff6b' : i < 10 ? '#ffd21f' : '#ff2d3d';
+    if (flash) col = '#3d8bff';
+    x.beginPath(); x.arc(400 - 7 * 26 + i * 26, 30, 9, 0, 7);
+    x.fillStyle = on || flash ? col : '#1d222b'; x.shadowColor = col; x.shadowBlur = on || flash ? 16 : 0; x.fill();
+  }
+  x.shadowBlur = 0;
+
+  // tach
+  const cx = 400, cy = 292, R = 172, a0 = Math.PI * 0.75, sw = Math.PI * 1.5;
+  const ang = v => a0 + (v / MAXR) * sw;
+  x.lineWidth = 18; x.lineCap = 'butt';
+  x.strokeStyle = '#1a2029'; x.beginPath(); x.arc(cx, cy, R, a0, a0 + sw); x.stroke();
+  x.strokeStyle = '#5a0f16'; x.beginPath(); x.arc(cx, cy, R, ang(REDLINE), ang(MAXR)); x.stroke();
+  const g = x.createLinearGradient(cx - R, 0, cx + R, 0);
+  g.addColorStop(0, '#00e5ff'); g.addColorStop(0.6, '#ffb000'); g.addColorStop(1, '#ff2d3d');
+  x.strokeStyle = g; x.shadowColor = '#00e5ff'; x.shadowBlur = 14;
+  x.beginPath(); x.arc(cx, cy, R, a0, ang(S.rpm)); x.stroke(); x.shadowBlur = 0;
+  x.font = '600 18px Orbitron'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  for (let v = 0; v <= MAXR; v += 500) {
+    const a = ang(v), major = v % 1000 === 0, r1 = R - 16, r2 = R - (major ? 34 : 24);
+    x.strokeStyle = v >= REDLINE ? '#ff2d3d' : '#8a94a6'; x.lineWidth = major ? 3 : 1.5;
+    x.beginPath(); x.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); x.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2); x.stroke();
+    if (major) { x.fillStyle = v >= REDLINE ? '#ff2d3d' : '#c9d1dc'; x.fillText(v / 1000, cx + Math.cos(a) * (R - 54), cy + Math.sin(a) * (R - 54)); }
+  }
+  const na = ang(S.rpm);
+  x.strokeStyle = '#ff3b30'; x.lineWidth = 4; x.shadowColor = '#ff3b30'; x.shadowBlur = 10;
+  x.beginPath(); x.moveTo(cx + Math.cos(na) * 70, cy + Math.sin(na) * 70); x.lineTo(cx + Math.cos(na) * (R - 8), cy + Math.sin(na) * (R - 8)); x.stroke(); x.shadowBlur = 0;
+  x.fillStyle = '#fff'; x.font = '800 54px Orbitron'; x.fillText(Math.round(S.rpm / 10) * 10, cx, cy + 4);
+  x.fillStyle = '#7f8a9c'; x.font = '500 14px Orbitron'; x.fillText('RPM × 1000', cx, cy + 44);
+  x.fillStyle = '#c9d1dc'; x.font = '500 26px Orbitron'; x.fillText(Math.round(S.speed) + ' km/h', cx, cy + 128);
+
+  // side bars
+  function bar(X, Y, label, val, unit, lo, hi, warn) {
+    x.textAlign = 'left'; x.fillStyle = '#7f8a9c'; x.font = '500 13px Orbitron'; x.fillText(label, X, Y);
+    x.fillStyle = val >= warn ? '#ff2d3d' : '#fff'; x.font = '800 34px Orbitron'; x.fillText(Math.round(val) + unit, X, Y + 32);
+    rr(x, X, Y + 58, 150, 10, 5); x.fillStyle = '#1a2029'; x.fill();
+    const f = Math.max(0, Math.min(1, (val - lo) / (hi - lo)));
+    rr(x, X, Y + 58, 150 * f, 10, 5); x.fillStyle = val >= warn ? '#ff2d3d' : f > 0.55 ? '#2bff6b' : '#00b8ff'; x.fill();
+  }
+  bar(36, 110, 'COOLANT', S.clt, '°', 40, 120, 105);
+  bar(36, 215, 'OIL', S.oil, '°', 40, 140, 125);
+  bar(36, 320, 'INTAKE AIR', S.iat, '°', 0, 80, 65);
+  bar(614, 110, 'THROTTLE', S.thr, '%', 0, 100, 101);
+  x.textAlign = 'left'; x.fillStyle = '#7f8a9c'; x.font = '500 13px Orbitron'; x.fillText('ECONOMY', 614, 215);
+  x.fillStyle = '#fff'; x.font = '800 34px Orbitron'; x.fillText(kmlText(S.kml), 614, 247);
+  x.fillStyle = '#7f8a9c'; x.font = '500 14px Orbitron'; x.fillText('km/l', 614, 280);
+  x.fillText('TRIP AVG  15.8', 614, 340);
+}
+
+// ---------- B: jet HUD ----------
+const B = setup('b');
+const HG = '#3dff8f';
+function drawB(t) {
+  const x = B; x.fillStyle = '#020805'; x.fillRect(0, 0, 800, 480);
+  x.strokeStyle = HG; x.fillStyle = HG; x.shadowColor = HG; x.shadowBlur = 8; x.lineWidth = 2;
+  x.font = '20px "Share Tech Mono"'; x.textBaseline = 'middle';
+
+  function tape(X, val, perUnit, stepV, label, fmt, redFrom) {
+    const top = 70, bot = 390, mid = (top + bot) / 2;
+    x.save(); x.beginPath(); x.rect(X - 10, top, 140, bot - top); x.clip();
+    const start = Math.floor((val - (mid - top) / perUnit) / stepV) * stepV;
+    for (let v = start; v <= val + (mid - top) / perUnit; v += stepV) {
+      if (v < 0) continue;
+      const y = mid - (v - val) * perUnit;
+      x.strokeStyle = x.fillStyle = redFrom && v >= redFrom ? '#ff4d4d' : HG;
+      x.beginPath(); x.moveTo(X + 90, y); x.lineTo(X + 110, y); x.stroke();
+      x.textAlign = 'right'; x.fillText(fmt(v), X + 82, y);
+    }
+    x.restore(); x.strokeStyle = x.fillStyle = HG;
+    x.beginPath(); x.moveTo(X + 120, top); x.lineTo(X + 120, bot); x.stroke();
+    x.lineWidth = 2.5; x.beginPath();
+    x.moveTo(X - 6, mid - 22); x.lineTo(X + 104, mid - 22); x.lineTo(X + 122, mid); x.lineTo(X + 104, mid + 22); x.lineTo(X - 6, mid + 22); x.closePath();
+    x.fillStyle = '#020805'; x.fill(); x.stroke(); x.fillStyle = HG;
+    x.font = '30px "Share Tech Mono"'; x.textAlign = 'right'; x.fillText(Math.round(val), X + 98, mid + 1);
+    x.font = '16px "Share Tech Mono"'; x.textAlign = 'center'; x.fillText(label, X + 55, top - 18);
+    x.font = '20px "Share Tech Mono"'; x.lineWidth = 2;
+  }
+  tape(40, S.rpm, 0.09, 500, 'RPM', v => v, REDLINE);
+  tape(630, S.speed, 3, 10, 'KM/H', v => v);
+
+  // centre: throttle reticle
+  const cx = 400, cy = 220;
+  x.beginPath(); x.arc(cx, cy, 90, 0, 7); x.stroke();
+  x.lineWidth = 6; x.beginPath(); x.arc(cx, cy, 90, -Math.PI / 2, -Math.PI / 2 + S.thr / 100 * Math.PI * 2); x.stroke(); x.lineWidth = 2;
+  for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; x.beginPath(); x.moveTo(cx + Math.cos(a) * 100, cy + Math.sin(a) * 100); x.lineTo(cx + Math.cos(a) * 116, cy + Math.sin(a) * 116); x.stroke(); }
+  x.beginPath(); x.moveTo(cx - 30, cy); x.lineTo(cx - 10, cy); x.moveTo(cx + 10, cy); x.lineTo(cx + 30, cy); x.moveTo(cx, cy - 6); x.lineTo(cx, cy + 6); x.stroke();
+  x.textAlign = 'center'; x.font = '16px "Share Tech Mono"'; x.fillText('THR ' + Math.round(S.thr) + '%', cx, cy + 50);
+  if (S.rpm > REDLINE && Math.floor(t * 6) % 2) { x.fillStyle = x.strokeStyle = '#ff4d4d'; x.shadowColor = '#ff4d4d'; x.font = '26px "Share Tech Mono"'; x.fillText('SHIFT', cx, cy - 50); x.fillStyle = x.strokeStyle = x.shadowColor = HG; }
+
+  // readouts
+  const boxes = [['CLT', Math.round(S.clt) + '°C'], ['OIL', Math.round(S.oil) + '°C'], ['IAT', Math.round(S.iat) + '°C'], ['ECO', kmlText(S.kml) + ' KM/L']];
+  boxes.forEach((b, i) => {
+    const X = 196 + i * 104, Y = 372;
+    x.strokeRect(X, Y, 96, 64);
+    x.font = '14px "Share Tech Mono"'; x.fillText(b[0], X + 48, Y + 16);
+    x.font = (b[1].length > 6 ? 17 : 24) + 'px "Share Tech Mono"'; x.fillText(b[1], X + 48, Y + 42);
+  });
+  x.shadowBlur = 0;
+}
+
+// ---------- C: arcade ----------
+const C = setup('c');
+let gridOff = 0;
+function drawC(t) {
+  const x = C;
+  const sky = x.createLinearGradient(0, 0, 0, 300); sky.addColorStop(0, '#0d0221'); sky.addColorStop(1, '#2b0a4a');
+  x.fillStyle = sky; x.fillRect(0, 0, 800, 300);
+  x.fillStyle = '#0d0221'; x.fillRect(0, 300, 800, 180);
+  // sun
+  x.save(); x.beginPath(); x.arc(400, 300, 110, Math.PI, 0); x.clip();
+  const sun = x.createLinearGradient(0, 190, 0, 300); sun.addColorStop(0, '#ffd319'); sun.addColorStop(1, '#ff2975');
+  x.fillStyle = sun; x.fillRect(290, 190, 220, 110);
+  x.fillStyle = '#2b0a4a'; for (let i = 0; i < 6; i++) x.fillRect(290, 250 + i * 9, 220, 2 + i);
+  x.restore();
+  // grid
+  gridOff = (gridOff + S.speed * 0.02) % 1;
+  x.strokeStyle = '#ff2975'; x.lineWidth = 1.5; x.shadowColor = '#ff2975'; x.shadowBlur = 6;
+  for (let i = -12; i <= 12; i++) { x.beginPath(); x.moveTo(400 + i * 14, 300); x.lineTo(400 + i * 110, 480); x.stroke(); }
+  for (let k = 0; k < 10; k++) { const z = (k + gridOff) / 10, y = 300 + Math.pow(z, 2.2) * 180; x.beginPath(); x.moveTo(0, y); x.lineTo(800, y); x.stroke(); }
+  x.shadowBlur = 0;
+
+  x.textBaseline = 'top'; x.textAlign = 'center';
+  // power bar
+  const segs = 28, on = Math.round(S.rpm / MAXR * segs);
+  for (let i = 0; i < segs; i++) {
+    const v = i / segs * MAXR, col = v >= REDLINE ? '#ff2a2a' : v >= 4500 ? '#ff2975' : '#00f0ff';
+    x.fillStyle = i < on ? col : '#251040'; x.shadowColor = col; x.shadowBlur = i < on ? 10 : 0;
+    x.fillRect(64 + i * 24, 22, 18, 34);
+  }
+  x.shadowBlur = 0;
+  x.font = '40px "Press Start 2P"'; x.fillStyle = '#fff'; x.shadowColor = '#00f0ff'; x.shadowBlur = 14;
+  x.fillText(String(Math.round(S.rpm / 10) * 10).padStart(4, ' '), 400, 76);
+  x.shadowBlur = 0; x.font = '12px "Press Start 2P"'; x.fillStyle = '#00f0ff'; x.fillText('RPM', 400, 128);
+  if (S.rpm > REDLINE && Math.floor(t * 6) % 2) { x.fillStyle = '#ffd319'; x.font = '18px "Press Start 2P"'; x.fillText('SHIFT UP!', 400, 156); }
+
+  // stats
+  function stat(X, Y, label, val, f, col) {
+    x.textAlign = 'left'; x.font = '11px "Press Start 2P"'; x.fillStyle = '#fff'; x.fillText(label + ' ' + val, X, Y);
+    for (let i = 0; i < 10; i++) { x.fillStyle = i < Math.round(f * 10) ? col : '#251040'; x.fillRect(X + i * 15, Y + 18, 12, 12); }
+  }
+  stat(30, 180, 'H2O', Math.round(S.clt) + '°', (S.clt - 40) / 80, '#00f0ff');
+  stat(30, 232, 'OIL', Math.round(S.oil) + '°', (S.oil - 40) / 100, '#ffd319');
+  stat(30, 284, 'AIR', Math.round(S.iat) + '°', S.iat / 80, '#b967ff');
+  stat(612, 180, 'THR', Math.round(S.thr) + '%', S.thr / 100, '#ff2975');
+  x.textAlign = 'right'; x.font = '11px "Press Start 2P"'; x.fillStyle = '#ffd319'; x.fillText('SCORE km/l', 770, 232);
+  x.font = '26px "Press Start 2P"'; x.fillStyle = '#fff'; x.fillText(kmlText(S.kml), 770, 252);
+  x.font = '11px "Press Start 2P"'; x.fillStyle = '#00f0ff'; x.fillText(Math.round(S.speed) + ' KM/H', 770, 298);
+}
+
+function loop(ms) { const t = ms / 1000; step(t); drawA(t); drawB(t); drawC(t); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

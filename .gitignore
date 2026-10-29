@@ -1,0 +1,8 @@
+.tools/
+.gradle/
+build/
+local.properties
+.superpowers/brainstorm/
+.superpowers/sdd/
+*.iml
+.idea/
