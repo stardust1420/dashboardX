@@ -87,14 +87,35 @@ class EngineSynthTest {
         assertArrayEquals(a, b1 + b2, 1e-6f)
     }
 
-    @Test fun render_rampsAcrossBlockWithoutJumps() {
-        val s = EngineSynth()
-        s.render(FloatArray(441), 2000.0, 20.0, 1f)
+    private fun rms(x: FloatArray, from: Int, to: Int): Double =
+        sqrt((from until to).sumOf { x[it].toDouble() * x[it] } / (to - from))
+
+    /** Warm up at [warmThrottle], then render one 441-sample block at throttle 100 (rpm 3000 throughout). */
+    private fun stepBlock(warmThrottle: Double, seed: Long): FloatArray {
+        val s = EngineSynth(seed = seed)
+        s.render(FloatArray(4410), 3000.0, warmThrottle, 1f)
         val out = FloatArray(441)
-        s.render(out, 6000.0, 90.0, 1f) // big step: must be ramped, not jumped
-        var maxStep = 0f
-        for (i in 1 until out.size) maxStep = maxOf(maxStep, abs(out[i] - out[i - 1]))
-        assertTrue("max sample-to-sample step $maxStep", maxStep < 0.5f)
+        s.render(out, 3000.0, 100.0, 1f)
+        return out
+    }
+
+    /**
+     * A 0 -> 100 % throttle step must ramp across the block: the start of the block is still near
+     * the old (quiet) level and the end is at the new one. Unramped, the first 50 samples are already
+     * at full load (louder than the last 50 here). Measured margins over seeds 1..4: ramped
+     * first/last <= 0.45, unramped >= 1.04; ramped first / steady-at-100 first <= 0.25,
+     * unramped >= 0.86.
+     */
+    @Test fun render_rampsThrottleAcrossBlock() {
+        for (seed in 1L..4L) {
+            val ramped = stepBlock(0.0, seed)
+            val steady = stepBlock(100.0, seed)
+            val first = rms(ramped, 0, 50)
+            val last = rms(ramped, 391, 441)
+            val steadyFirst = rms(steady, 0, 50)
+            assertTrue("seed $seed: first=$first last=$last", first < 0.6 * last)
+            assertTrue("seed $seed: ramped first=$first steady first=$steadyFirst", first < 0.5 * steadyFirst)
+        }
     }
 
     @Test fun render_deterministicForSeed() {
