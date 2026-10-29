@@ -3,6 +3,7 @@ package com.karan.dashboardx.obd
 import com.karan.dashboardx.data.ConnectionStatus
 import com.karan.dashboardx.data.Pid
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -53,6 +54,49 @@ class ObdSourceTest {
         assertEquals(ConnectionStatus.CONNECTED, src.status.value)
         assertEquals(ConnectionStatus.CONNECTING, seen[1])
         assertTrue(src.state.value.readings.containsKey(Pid.RPM))
+        src.stop()
+    }
+
+    @Test
+    fun source_stopSetsIdleEvenMidReconnect() = runTest {
+        val d = StandardTestDispatcher(testScheduler)
+        val src = source(d, { testScheduler.currentTime }) { FakeTransport(script, 0) }
+        src.start(backgroundScope)
+        advanceTimeBy(500) // failed, now in the 1000 ms backoff
+        assertEquals(ConnectionStatus.RECONNECTING, src.status.value)
+        src.stop()
+        advanceTimeBy(5000)
+        assertEquals(ConnectionStatus.IDLE_NEEDS_SETUP, src.status.value)
+    }
+
+    @Test
+    fun source_closesTransportOnScopeCancel() = runTest {
+        val d = StandardTestDispatcher(testScheduler)
+        val t = FakeTransport(script)
+        val src = source(d, { testScheduler.currentTime }) { t }
+        val scope = kotlinx.coroutines.CoroutineScope(d + kotlinx.coroutines.SupervisorJob())
+        src.start(scope)
+        advanceTimeBy(100)
+        scope.cancel()
+        advanceTimeBy(100)
+        assertTrue(t.closed)
+    }
+
+    @Test
+    fun source_nonIoExceptionRetries() = runTest {
+        val d = StandardTestDispatcher(testScheduler)
+        var n = 0
+        val src = source(d, { testScheduler.currentTime }) {
+            if (n++ == 0) object : ObdTransport {
+                override suspend fun open() { throw SecurityException("no bt permission") }
+                override suspend fun send(cmd: String): String = ""
+                override fun close() {}
+            } else FakeTransport(script)
+        }
+        src.start(backgroundScope)
+        advanceTimeBy(3000)
+        assertEquals(2, n)
+        assertEquals(ConnectionStatus.CONNECTED, src.status.value)
         src.stop()
     }
 }

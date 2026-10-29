@@ -6,11 +6,11 @@ import com.karan.dashboardx.data.DataSource
 import com.karan.dashboardx.data.Pid
 import com.karan.dashboardx.data.Reading
 import com.karan.dashboardx.settings.Settings
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,27 +32,33 @@ class ObdSource(
     override val status: StateFlow<ConnectionStatus> = _status
 
     private var job: Job? = null
-    @Volatile private var transport: ObdTransport? = null
+    private val statusLock = Any()
 
     override fun start(scope: CoroutineScope) {
         if (job?.isActive == true) return
-        _status.value = ConnectionStatus.CONNECTING
+        synchronized(statusLock) { _status.value = ConnectionStatus.CONNECTING }
         job = scope.launch(ioDispatcher) { run() }
     }
 
-    private suspend fun run() {
+    /** Writes status only while this run is still active, so stop()'s IDLE always wins. */
+    private fun CoroutineScope.setStatus(s: ConnectionStatus) {
+        synchronized(statusLock) { if (isActive) _status.value = s }
+    }
+
+    private suspend fun CoroutineScope.run() {
         var attempt = 0
         var cycle = 0
-        while (currentCoroutineContext().isActive) {
+        while (isActive) {
+            var t: ObdTransport? = null
             try {
-                val t = transportFactory().also { transport = it }
+                t = transportFactory()
                 t.open()
                 val elm = Elm327(t, log)
                 val supported = elm.init()
                 _state.value = _state.value.copy(unsupported = Pid.entries.toSet() - supported)
-                _status.value = ConnectionStatus.CONNECTED
+                setStatus(ConnectionStatus.CONNECTED)
                 attempt = 0
-                while (currentCoroutineContext().isActive) {
+                while (isActive) {
                     for (pid in PollSchedule.pidsFor(cycle, supported)) {
                         val v = elm.read(pid) ?: continue
                         val now = clock()
@@ -61,25 +67,28 @@ class ObdSource(
                     cycle++
                     delay(1) // yield between cycles; real latency comes from the adapter
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: IOException) {
                 log.add("link error: ${e.message}")
             } catch (e: RetryableObdException) {
                 log.add("init failed: ${e.message}")
+            } catch (e: Exception) {
+                log.add("unexpected ${e.javaClass.simpleName}: ${e.message}")
+            } finally {
+                t?.close()
             }
-            transport?.close()
-            transport = null
-            _status.value = ConnectionStatus.RECONNECTING
-            val wait = backoffMs(attempt++)
+            setStatus(ConnectionStatus.RECONNECTING)
+            val wait = backoffMs(attempt)
+            attempt = minOf(attempt + 1, 20)
             log.add("reconnect in ${wait}ms")
             delay(wait)
         }
     }
 
     override fun stop() {
-        job?.cancel()
+        job?.cancel() // the run's finally block closes its transport
         job = null
-        transport?.close()
-        transport = null
-        _status.value = ConnectionStatus.IDLE_NEEDS_SETUP
+        synchronized(statusLock) { _status.value = ConnectionStatus.IDLE_NEEDS_SETUP }
     }
 }
