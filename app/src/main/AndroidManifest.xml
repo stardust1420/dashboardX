@@ -30,6 +30,16 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".phone.SettingsActivity"
+            android:exported="false"
+            android:label="DashboardX settings" />
+
+        <activity
+            android:name=".phone.DiagnosticsActivity"
+            android:exported="false"
+            android:label="DashboardX diagnostics" />
+
         <service
             android:name=".car.DashCarAppService"
             android:exported="true">

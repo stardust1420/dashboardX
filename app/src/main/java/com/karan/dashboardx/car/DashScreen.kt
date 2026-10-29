@@ -39,9 +39,6 @@ class DashScreen(carContext: CarContext) : Screen(carContext), DefaultLifecycleO
     }
 
     override fun onCreate(owner: LifecycleOwner) {
-        // TEMP until Task 12's settings screen: an unconfigured car shows the demo, whichever
-        // screen (phone or car) started the process.
-        DashRuntime.demoWhenUnconfigured = true
         DashRuntime.acquire(carContext)
         renderer.style = DashRuntime.settings.style
         val controller = EngineSoundController(carContext)

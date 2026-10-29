@@ -66,12 +66,6 @@ object DashRuntime {
     /** Called from [frame] for each warning that should chime (Task 11 plugs the sound in). */
     @Volatile var onChime: ((Warning) -> Unit)? = null
 
-    /**
-     * TEMP until the settings screen lands (Task 12): when true and no adapter is saved, run the
-     * demo source instead of NEEDS_SETUP. Not persisted.
-     */
-    @Volatile var demoWhenUnconfigured = false
-
     @Volatile private var redline = DEFAULT_REDLINE_RPM
     @Volatile private var coolantWarn = DEFAULT_COOLANT_WARN_C
     private val composer = FrameComposer() // guarded by itself
@@ -137,8 +131,7 @@ object DashRuntime {
         val s = settings
         loadThresholds()
         val addr = s.adapterAddress
-        val demo = s.demoMode || (demoWhenUnconfigured && addr.isNullOrBlank())
-        val choice = chooseSource(demo, addr, bluetoothUsable(ctx))
+        val choice = chooseSource(s.demoMode, addr, bluetoothUsable(ctx))
         diag.add("runtime: source $choice")
         val src: DataSource? = when (choice) {
             SourceChoice.DEMO -> DemoSource()

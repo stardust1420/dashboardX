@@ -21,6 +21,11 @@ class Settings(private val prefs: SharedPreferences) {
         get() = prefs.getString(K_ADDR, null)
         set(v) { prefs.edit().apply { if (v == null) remove(K_ADDR) else putString(K_ADDR, v) }.apply() }
 
+    /** Display name of the chosen adapter, as seen when it was picked (may be null). */
+    var adapterName: String?
+        get() = prefs.getString(K_ADDR_NAME, null)
+        set(v) { prefs.edit().apply { if (v.isNullOrBlank()) remove(K_ADDR_NAME) else putString(K_ADDR_NAME, v) }.apply() }
+
     var adapterIsBle: Boolean
         get() = prefs.getBoolean(K_BLE, DEFAULT_ADAPTER_IS_BLE)
         set(v) { prefs.edit().putBoolean(K_BLE, v).apply() }
@@ -52,6 +57,7 @@ class Settings(private val prefs: SharedPreferences) {
     private companion object {
         const val K_STYLE = "style"
         const val K_ADDR = "adapterAddress"
+        const val K_ADDR_NAME = "adapterName"
         const val K_BLE = "adapterIsBle"
         const val K_DEMO = "demoMode"
         const val K_VOL = "soundVolume"
