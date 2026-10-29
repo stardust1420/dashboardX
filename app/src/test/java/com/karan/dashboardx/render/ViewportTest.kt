@@ -1,0 +1,20 @@
+package com.karan.dashboardx.render
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class ViewportTest {
+    @Test fun viewport_wide() {
+        val v = Viewport.fit(0, 0, 1280, 720)
+        assertEquals(1.5f, v.scale, 0.0001f)
+        assertEquals(40f, v.dx, 0.0001f)
+        assertEquals(0f, v.dy, 0.0001f)
+    }
+
+    @Test fun viewport_offsetArea() {
+        val v = Viewport.fit(100, 50, 800, 480)
+        assertEquals(1f, v.scale, 0.0001f)
+        assertEquals(100f, v.dx, 0.0001f)
+        assertEquals(50f, v.dy, 0.0001f)
+    }
+}
