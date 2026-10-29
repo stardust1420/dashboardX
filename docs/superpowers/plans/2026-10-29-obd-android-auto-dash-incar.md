@@ -12,7 +12,7 @@ Fresh start: `adb shell pm clear com.karan.dashboardx`, then `adb logcat -b cras
 |---|-------|--------|
 | A1 | First launch shows "Set up DashboardX on your phone"; gear reads "⚙ Set up"; tapping away from the gear cycles the style, gear opens Settings | pending — owner to run |
 | A2 | Landscape and immersive; Racing layout looks right; animation smooth in demo | pending — owner to run |
-| A3 | Settings, Demo mode on, back: dashboard animates, gear shows just "⚙". Demo off with no adapter brings back the setup message | pending — owner to run |
+| A3 | Settings, Demo mode on, back: dashboard animates, small DEMO tag top-left, gear shows just "⚙". Demo off with no adapter brings back the setup message | pending — owner to run |
 | A4 | Tap through all 3 styles (Racing, HUD, Arcade); screenshots: `adb exec-out screencap -p > $TMPDIR/racing.png` (and hud, arcade) | pending — owner to run |
 | A5 | Restart the app: the chosen style persists | pending — owner to run |
 | A6 | Orbitron weights 500, 600, 800 visibly differ (variable font works) | pending — owner to run |
@@ -22,6 +22,8 @@ Fresh start: `adb shell pm clear com.karan.dashboardx`, then `adb logcat -b cras
 | A10 | With Location services off, Choose, grant: "Location is off…" line is still there after the 8 s scan | pending — owner to run |
 | A11 | Choose, grant: 8 s scan lists paired devices ("Classic") and nearby BLE devices ("BLE"). Picking the adapter updates the row and turns Demo off | pending — owner to run |
 | A12 | Bluetooth off, Choose, "Turn on Bluetooth": system prompt appears | pending — owner to run |
+| A14 | Adapter chosen, Bluetooth off, open the app: dashboard shows "Reconnecting…" (not "Set up…"); turn Bluetooth on: connects within about 10 s with no restart. Diagnostics log shows `link error: Bluetooth is off` | pending — owner to run |
+| A15 | Change volume, calibration, redline or coolant while connected: no "Connecting…"/"Reconnecting…" flash, TRIP AVG keeps its value. Switching Demo or picking an adapter does restart | pending — owner to run |
 | A13 | Calibration 2.0 rejected (red error, not saved), 1.1 saves. Redline 2999 rejected. Coolant 131 rejected | pending — owner to run |
 | A14 | Settings, Diagnostics, Open: log updates each second, status and PIDs shown, Share opens the chooser | pending — owner to run |
 | A15 | `adb logcat -b crash -d` is empty | pending — owner to run |
@@ -59,13 +61,14 @@ $ANDROID_HOME/extras/google/auto/desktop-head-unit
 | C8 | Kill and relaunch: Sound starts off | pending — owner to run |
 | C9 | Volume slider (Settings): judge whether the default 0.7 is too quiet or too loud over ducked music | pending — owner to run |
 | C10 | `adb logcat \| grep -i -E "AudioTrack\|AudioFocus\|dashboardx"` shows no errors; diag log has no `engine sound:` or `chime:` failure lines | pending — owner to run |
+| C11 | Sound on, then lose RPM (unplug the adapter, or engine off): music returns to full volume after about 1 s (`engine sound: no rpm … focus abandoned` in the log) and ducks again when RPM returns | pending — owner to run |
 
 ## D. Real car (engine running, adapter plugged in)
 
 | # | Check | Result |
 |---|-------|--------|
 | D1 | Adapter type (Classic or BLE) and how it was chosen | pending — owner to run |
-| D2 | Adapter connects within 10 s of opening the app with the engine running | pending — owner to run |
+| D2 | Adapter connects within 10 s of opening the app with the engine running (the first 0100 may take 3–6 s while the adapter searches for the protocol; it no longer times out) | pending — owner to run |
 | D3 | RPM matches the car's tachometer | pending — owner to run |
 | D4 | Coolant settles around 85–95 °C once warm | pending — owner to run |
 | D5 | Oil temp shows a value or N/A (note which) | pending — owner to run |
@@ -73,8 +76,10 @@ $ANDROID_HOME/extras/google/auto/desktop-head-unit
 | D7 | Plugging the adapter back in recovers | pending — owner to run |
 | D8 | Speed matches the speedometer (small offset is normal) | pending — owner to run |
 | D9 | Idle throttle value noted (expected 10–18 %); does ∞ km/l or crackle ever show? | pending — owner to run |
-| D10 | Fuel calibration, one continuous connected drive, no settings changes: fill to brim, switch to Racing, drive the tank; note trip-meter km and TRIP AVG km/l; refill, note litres; real km/l = km / litres; new factor = current x (TRIP AVG / real). The average covers only the current connection and resets on reconnect or settings change. Record km, litres, TRIP AVG, factor | pending — owner to run |
+| D10 | Fuel calibration, one continuous drive in Racing style: fill to brim; tap until it shows Racing; keep the dashboard on screen (car screen, or phone app in front) for the whole tank; do not switch Demo or pick an adapter; note trip-meter km and TRIP AVG km/l; refill, note litres; real km/l = km / litres; new factor = current x (TRIP AVG / real). TRIP AVG resets only when DashboardX starts its data source (phone app or car screen opened from fully closed, adapter picked, Demo toggled); adapter dropouts and other settings changes do not reset it. Record km, litres, TRIP AVG, factor | pending — owner to run |
 | D11 | Engine sound delay feels acceptable (about 0.1–0.2 s expected) | pending — owner to run |
+| D12 | Ignition on, engine off, adapter connected: log shows `retrying 0100 on this link` every 3 s; start the engine within 15 s and it connects without dropping Bluetooth. If CONNECTED with no RPM, the "No data from car — is the engine on?" hint appears after 3 s and clears when the engine runs | pending — owner to run |
+| D13 | Coolant, IAT and oil keep their values between slow polls (no flicker to "--") | pending — owner to run |
 
 ## E. Diagnostics log
 
