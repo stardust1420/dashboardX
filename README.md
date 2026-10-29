@@ -94,7 +94,14 @@ The log includes the connection status, which sensors the car supports and a tim
 ## 7. Known limits
 
 - **Oil temperature may show N/A.** Many cars, probably including the Verna, do not report it through the standard OBD channel.
-- **Fuel economy is an estimate.** It is calculated from airflow, not measured. To calibrate: fill the tank to the brim, reset your trip, drive normally, then fill to the brim again. Note the litres added. Compare with the total litres DashboardX thinks it used. Set the **Fuel calibration** value in Settings to (real litres / DashboardX litres). It accepts 0.5 to 1.5. Repeat if you want to fine tune it.
+- **Fuel economy is an estimate.** It is calculated from airflow, not measured. To calibrate it against a fill-up:
+  1. Fill the tank to the brim, then restart the app (the trip average resets when the app connects).
+  2. Drive the tank and note the km from the car's trip meter.
+  3. Fill to the brim again and note the litres added.
+  4. Real km/l = km / litres.
+  5. New calibration = current calibration x (DashboardX TRIP AVG km/l / real km/l).
+
+  Example: the app says 16.0, the real figure is 14.5, and the current factor is 1.0. The new factor is 1.0 x (16.0 / 14.5) = 1.10. Enter it in Settings (range 0.5 to 1.5). A higher factor means more fuel and a lower km/l. The trip average only covers time the app was connected, so keep it connected for the whole tank.
 - **The engine sound is delayed** by about 0.1 to 0.2 seconds, and it starts off on every drive.
 - **The Verna throttle may idle at 10 to 18 %.** The infinity (∞) fuel economy reading and the overrun crackle sound only appear when the throttle reads near zero while moving, so they may show rarely or never on this car.
 - **Not for the Play Store.** It is a personal sideloaded app and Android Auto will only show it with Unknown sources on.

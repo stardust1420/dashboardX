@@ -73,7 +73,7 @@ $ANDROID_HOME/extras/google/auto/desktop-head-unit
 | D7 | Plugging the adapter back in recovers | pending — owner to run |
 | D8 | Speed matches the speedometer (small offset is normal) | pending — owner to run |
 | D9 | Idle throttle value noted (expected 10–18 %); does ∞ km/l or crackle ever show? | pending — owner to run |
-| D10 | Fuel calibration: litres added at fill-up vs DashboardX estimate, resulting factor | pending — owner to run |
+| D10 | Fuel calibration: fill to brim and restart app; drive, note trip km; refill, note litres; real km/l = km / litres; new factor = current x (TRIP AVG km/l / real km/l). Record km, litres, TRIP AVG, factor (trip average covers only connected time) | pending — owner to run |
 | D11 | Engine sound delay feels acceptable (about 0.1–0.2 s expected) | pending — owner to run |
 
 ## E. Diagnostics log
