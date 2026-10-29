@@ -1,7 +1,6 @@
 package com.karan.dashboardx
 
 import android.Manifest
-import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -29,10 +28,14 @@ import kotlinx.coroutines.launch
 
 enum class SourceChoice { DEMO, OBD, NEEDS_SETUP }
 
-/** Demo mode always wins; otherwise OBD needs both a saved adapter and usable Bluetooth. */
-fun chooseSource(demoMode: Boolean, adapterAddress: String?, bluetoothUsable: Boolean): SourceChoice = when {
+/**
+ * Demo mode always wins. Otherwise OBD needs a saved adapter and (API 31+) BLUETOOTH_CONNECT
+ * ([connectPermission] is true below API 31). Bluetooth being off is deliberately not an input:
+ * the ObdSource starts anyway, shows RECONNECTING and connects once Bluetooth comes on.
+ */
+fun chooseSource(demoMode: Boolean, adapterAddress: String?, connectPermission: Boolean): SourceChoice = when {
     demoMode -> SourceChoice.DEMO
-    adapterAddress.isNullOrBlank() || !bluetoothUsable -> SourceChoice.NEEDS_SETUP
+    adapterAddress.isNullOrBlank() || !connectPermission -> SourceChoice.NEEDS_SETUP
     else -> SourceChoice.OBD
 }
 
@@ -131,7 +134,7 @@ object DashRuntime {
         val s = settings
         loadThresholds()
         val addr = s.adapterAddress
-        val choice = chooseSource(s.demoMode, addr, bluetoothUsable(ctx))
+        val choice = chooseSource(s.demoMode, addr, connectPermission(ctx))
         diag.add("runtime: source $choice")
         val src: DataSource? = when (choice) {
             SourceChoice.DEMO -> DemoSource()
@@ -170,16 +173,8 @@ object DashRuntime {
         src?.stop()
     }
 
-    /** Adapter present and enabled, and (API 31+) BLUETOOTH_CONNECT granted. */
-    private fun bluetoothUsable(ctx: Context): Boolean {
-        val adapter = ctx.getSystemService(BluetoothManager::class.java)?.adapter ?: return false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            ctx.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
-        ) return false
-        return try {
-            adapter.isEnabled
-        } catch (e: SecurityException) {
-            false
-        }
-    }
+    /** BLUETOOTH_CONNECT granted (always true below API 31, where it does not exist). */
+    private fun connectPermission(ctx: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ctx.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 }

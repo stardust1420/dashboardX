@@ -28,6 +28,7 @@ import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
 import com.karan.dashboardx.DashRuntime
+import com.karan.dashboardx.data.ConnectionStatus
 
 /**
  * Chooses the OBD adapter: requests the runtime Bluetooth permissions, then shows one dialog with
@@ -75,7 +76,9 @@ class AdapterPicker(private val activity: Activity, private val onPicked: () -> 
         if (requestCode != REQ_PERMS) return false
         if (results.any { it == PackageManager.PERMISSION_GRANTED }) {
             DashRuntime.diag.add("settings: Bluetooth permission granted")
-            DashRuntime.restart(activity) // bluetoothUsable is re-evaluated
+            // Only a source waiting in setup (permission missing) needs a restart; a running
+            // source keeps its link and trip average.
+            if (DashRuntime.status.value == ConnectionStatus.IDLE_NEEDS_SETUP) DashRuntime.restart(activity)
         }
         proceed()
         return true
@@ -83,10 +86,8 @@ class AdapterPicker(private val activity: Activity, private val onPicked: () -> 
 
     fun onActivityResult(requestCode: Int, resultCode: Int): Boolean {
         if (requestCode != REQ_ENABLE) return false
-        if (resultCode == Activity.RESULT_OK) {
-            DashRuntime.restart(activity)
-            proceed()
-        }
+        // No restart: a running ObdSource retries on its own and connects once Bluetooth is on.
+        if (resultCode == Activity.RESULT_OK) proceed()
         return true
     }
 
