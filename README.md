@@ -53,6 +53,15 @@ Android Auto 17.7 and newer hides sideloaded Car App Library apps such as Dashbo
 6. Force-stop Android Auto. DashboardX now shows in Android Auto settings, **Customize launcher**.
 
 ### After a code change
+The quick way is one command, which runs the tests, builds, copies the APK to the phone and opens KingInstaller:
+
+```
+tools/install-car.sh
+```
+
+Then do steps 3 and 4 above on the phone. The script waits for the install, checks the installer is `com.android.vending` and restarts Android Auto. If the check fails, run `tools/install-car.sh --fresh`, which uninstalls the old copy first (this clears the app's settings). Add `--skip-tests` to skip the tests.
+
+The same steps by hand:
 1. Run the tests and build: `bash tools/jvmcheck.sh`, then `tools/gradle.sh :app:assembleDebug`.
 2. Copy the new APK to the phone (step 1 above).
 3. Install it with KingInstaller (steps 3 to 6 above). Try this without uninstalling first, which may keep your settings (untested). If the step 5 check shows any installer other than `com.android.vending`, uninstall and install again.
