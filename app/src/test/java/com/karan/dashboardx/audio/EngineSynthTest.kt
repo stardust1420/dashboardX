@@ -156,6 +156,18 @@ class EngineSynthTest {
         assertTrue("sport pops: peak $pPeak vs comfort $cPeak", pPeak > 1.5f * cPeak)
     }
 
+    /**
+     * A lift that eases off (throttle falling with a ~0.2 s time constant, as OBD readings through the
+     * dash smoothing deliver it, and only to part throttle, as in the demo) still flutters.
+     */
+    @Test fun turbo_flutterOnGradualLift() {
+        val ease = (0 until 100).map { 4500.0 to 24.0 + 76.0 * exp(-it / 20.0) }
+        val s = turboOnly(List(200) { 4500.0 to 100.0 } + ease + List(100) { 3500.0 to 24.0 }, blocks = 1)
+        var swells = 0
+        for (i in 205 until 300) if (s[i] > 1.4 * s[i - 2] && s[i] > 0.004) swells++
+        assertTrue("flutter on a gradual lift: swells $swells", swells >= 4)
+    }
+
     /** Sport+ minus Sport, rendered side by side through the same inputs: the turbo on its own. */
     private fun turboOnly(steps: List<Pair<Double, Double>>, blocks: Int): List<Double> {
         val sport = EngineSynth()
@@ -184,14 +196,14 @@ class EngineSynthTest {
 
     /** Lifting off boost gives a blow-off with a "stu-tu-tu" flutter that dies away; the turbo is then silent. */
     @Test fun turbo_flutterOnLift() {
-        val t = turboOnly(listOf(4500.0 to 100.0, 3500.0 to 0.0), blocks = 200)
-        val pssh = (200 until 215).maxOf { t[it] }
-        val after = t[399]
+        val t = turboOnly(listOf(4500.0 to 100.0, 3500.0 to 0.0), blocks = 300)
+        val pssh = (300 until 315).maxOf { t[it] }
+        val after = t[599]
         assertTrue("blow-off $pssh", pssh > 0.01)
         assertTrue("silent after: $after", after < 1e-3)
-        // Separate "tu"s: the 10 ms block level swells and falls several times in the first 0.6 s.
+        // Separate "tu"s: the 10 ms block level swells and falls several times in the first second.
         var swells = 0
-        for (i in 202 until 260) if (t[i] > 1.4 * t[i - 2] && t[i] > 0.004) swells++
+        for (i in 302 until 400) if (t[i] > 1.4 * t[i - 2] && t[i] > 0.004) swells++
         assertTrue("flutter swells $swells", swells >= 4)
     }
 

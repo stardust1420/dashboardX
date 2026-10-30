@@ -31,12 +31,14 @@ import kotlin.math.tanh
  *
  * - a [Tune] per drive mode: [Tune.COMFORT] is the sound above; Sport steps up the level,
  *   brightness, low cross-plane rumble (orders 2 and 6) and pop rate, all still clean tones. Sport+
- *   is Sport plus a turbo: a clean whistle that spools up with throttle and revs (pitch and level
- *   follow a lagging boost estimate) and, when boost is dumped on a lift, a soft "pssh" under a
+ *   is Sport plus a turbo: a whistle that spools up with throttle and revs (pitch and level follow a
+ *   lagging boost estimate), with an octave-below body, a metallic partial, a deep spool rumble, a
+ *   slight wobble and a breath of intake air, and, when boost is dumped on a lift, a soft "pssh" under a
  *   Supra-style compressor flutter ("stu-tu-tu"): smooth, slightly uneven chirps (~380 Hz sliding
  *   to ~200 Hz, each bending down a little) over a deep body tone (~115 to ~60 Hz) and a breath of
- *   air, ~22 a second slowing to ~12
- *   as they die away over about 0.8 s; the note dips and the pops hold back meanwhile so it is heard. Level, brightness, rumble and turbo glide (~150 ms) to a new tune, so a mode change never
+ *   air, ~12 a second slowing to ~7. Strong overtones keep it audible on small speakers that cannot
+ *   play the deep fundamental
+ *   as they die away over about 1.5 s; the note dips and the pops hold back meanwhile so it is heard. Level, brightness, rumble and turbo glide (~150 ms) to a new tune, so a mode change never
  *   clicks.
  *
  * State (crank phase, followers, pop filters, RNG) carries across [render] calls, so consecutive blocks join
@@ -60,9 +62,9 @@ class EngineSynth(private val sampleRate: Int = 44100, seed: Long = 1) {
         companion object {
             /** The original smooth Lexus-style note. */
             val COMFORT = Tune(level = 1.0, bright = 0.0, growl = 1.0, popRate = 1.0, popLevel = 1.0, overrunRpm = 1500.0)
-            val SPORT = Tune(level = 1.18, bright = 0.1, growl = 1.3, popRate = 1.8, popLevel = 1.15, overrunRpm = 1300.0)
+            val SPORT = Tune(level = 1.18, bright = 0.1, growl = 1.3, popRate = 1.8, popLevel = 1.7, overrunRpm = 1300.0)
             /** Sport's note, no louder, with the turbo. */
-            val SPORT_PLUS = Tune(level = 1.18, bright = 0.1, growl = 1.3, popRate = 1.8, popLevel = 1.15, overrunRpm = 1300.0, turbo = 1.0)
+            val SPORT_PLUS = Tune(level = 1.18, bright = 0.1, growl = 1.3, popRate = 1.8, popLevel = 1.7, overrunRpm = 1300.0, turbo = 1.0)
         }
     }
 
@@ -103,9 +105,17 @@ class EngineSynth(private val sampleRate: Int = 44100, seed: Long = 1) {
     // Turbo: boost (0..1) spools up slowly and dumps fast; its own RNG keeps the pops unchanged.
     private val turboRng = Random(seed + 1)
     private var boost = 0.0
+    // Recent peak of the boost demand, fading slowly: a lift is measured against it, so a throttle
+    // that eases off over a few hundred ms (OBD readings and the dash smoothing do) still dumps the
+    // turbo. Demand (unlike boost, which drains slowly) only rises again when the throttle does.
+    private var demandPeak = 0.0
+    private val peakFade = exp(-1.0 / (PEAK_FADE_S * sampleRate))
     private val spoolA = 1 - exp(-1.0 / (SPOOL_S * sampleRate))
     private val dumpA = 1 - exp(-1.0 / (DUMP_S * sampleRate))
+    /** Phase at an eighth of the whistle pitch: every whistle partial is a whole multiple of it. */
     private var whistlePhase = 0.0
+    private var wobblePhase = 0.0
+    private val whistleAir = Resonator(1600.0, 0.7)
     private var bovEnv = 0.0
     private val bovDecay = exp(-1.0 / (BOV_DECAY_S * sampleRate))
     private val bovBand = Resonator(1800.0, 0.9)
@@ -227,10 +237,13 @@ class EngineSynth(private val sampleRate: Int = 44100, seed: Long = 1) {
     /** One sample of turbo (whistle + blow-off), already scaled by the gliding [Tune.turbo]. */
     private fun turbo(rpm: Double, thr: Double): Double {
         val boostTarget = thr * ((rpm - TURBO_FROM_RPM) / (TURBO_FULL_RPM - TURBO_FROM_RPM)).coerceIn(0.0, 1.0)
-        // A sharp fall in demand with real boost built up dumps it through the blow-off valve.
-        if (boost > 0.35 && boostTarget < boost - 0.3 && bovEnv < 0.05 && flutterEnv < 0.05) {
+        // Demand falling well below its recent peak, with real boost built up, dumps it through the
+        // blow-off valve: once per lift, as the peak is then reset to the new demand.
+        demandPeak = maxOf(boostTarget, demandPeak * peakFade)
+        if (boost > 0.35 && boostTarget < demandPeak - 0.3 && bovEnv < 0.05 && flutterEnv < 0.05) {
             bovEnv = boost
             flutterEnv = boost
+            demandPeak = boostTarget
             flutterPhase = 0.0
             flutterHz = FLUTTER_START_HZ
             flutterPitch = FLUTTER_PITCH_HI
@@ -241,9 +254,18 @@ class EngineSynth(private val sampleRate: Int = 44100, seed: Long = 1) {
             flutterEnv = 0.0
             return 0.0
         }
-        whistlePhase += (WHISTLE_LO_HZ + (WHISTLE_HI_HZ - WHISTLE_LO_HZ) * boost) / sr
+        // A slight wobble keeps the whine alive instead of a test tone.
+        wobblePhase += WOBBLE_HZ / sr
+        if (wobblePhase >= 1.0) wobblePhase -= 1.0
+        val pitch = (WHISTLE_LO_HZ + (WHISTLE_HI_HZ - WHISTLE_LO_HZ) * boost) * (1 + WOBBLE * sin(2 * PI * wobblePhase))
+        whistlePhase += pitch / 8 / sr
         if (whistlePhase >= 1.0) whistlePhase -= 1.0
-        val whistle = (sin(2 * PI * whistlePhase) + 0.2 * sin(4 * PI * whistlePhase)) * boost * boost * WHISTLE
+        val q = 2 * PI * whistlePhase
+        // Main whine and its octave, an octave below for body, a metallic 1.5x partial and a deep
+        // spool rumble three octaves down; plus a breath of intake air.
+        val whine = sin(8 * q) + 0.25 * sin(16 * q) + 0.5 * sin(4 * q) + 0.2 * sin(12 * q) + 0.45 * sin(q)
+        val intake = whistleAir.next(turboRng.nextDouble() * 2 - 1) * WHISTLE_AIR
+        val whistle = (whine + intake) * boost * boost * WHISTLE
         val bov = if (bovEnv > 1e-4) {
             bovLp += bovLpA * (bovBand.next(turboRng.nextDouble() * 2 - 1) - bovLp)
             val v = bovLp * bovEnv * BOV
@@ -270,7 +292,7 @@ class EngineSynth(private val sampleRate: Int = 44100, seed: Long = 1) {
             flutterBody += flutterPitch * BODY_RATIO / sr
             if (flutterBody >= 1.0) flutterBody -= 1.0
             val w = 2 * PI * flutterTone
-            val chirp = sin(w) + 0.35 * sin(2 * w) + 0.15 * sin(3 * w)
+            val chirp = sin(w) + 0.6 * sin(2 * w) + 0.4 * sin(3 * w) + 0.2 * sin(4 * w)
             val body = sin(2 * PI * flutterBody)
             val air = flutterAir.next(turboRng.nextDouble() * 2 - 1)
             val v = (chirp * FLUTTER_CHIRP + body * FLUTTER_BODY + air * FLUTTER_AIR) * shape * tuGain * flutterEnv
@@ -339,24 +361,28 @@ class EngineSynth(private val sampleRate: Int = 44100, seed: Long = 1) {
         const val TURBO_FULL_RPM = 4000.0
         const val SPOOL_S = 0.6 // lag before the whistle builds
         const val DUMP_S = 0.12
-        const val WHISTLE_LO_HZ = 1400.0
-        const val WHISTLE_HI_HZ = 3800.0
+        const val PEAK_FADE_S = 2.5
+        const val WHISTLE_LO_HZ = 1100.0
+        const val WHISTLE_HI_HZ = 3000.0
+        const val WOBBLE_HZ = 5.5
+        const val WOBBLE = 0.012
+        const val WHISTLE_AIR = 0.5
         /** Whistle sits well under the note: present, not piercing. */
-        const val WHISTLE = 0.035
+        const val WHISTLE = 0.04
         const val BOV = 0.12
-        const val FLUTTER_CHIRP = 0.22
-        const val FLUTTER_AIR = 0.4
-        const val FLUTTER_BODY = 0.45
+        const val FLUTTER_CHIRP = 0.36
+        const val FLUTTER_AIR = 0.6
+        const val FLUTTER_BODY = 0.6
         const val BODY_RATIO = 0.3 // body tone at under a third of the chirp pitch
         const val FLUTTER_PITCH_HI = 380.0
         const val FLUTTER_PITCH_LO = 200.0
         /** How far the note dips (0..1) and the pops hold back at the peak of a flutter. */
-        const val FLUTTER_DUCK = 0.5
+        const val FLUTTER_DUCK = 0.65
         const val FLUTTER_POP_DUCK = 0.8
-        const val FLUTTER_START_HZ = 22.0
-        const val FLUTTER_END_HZ = 12.0
-        const val FLUTTER_SLOW_S = 0.45
-        const val FLUTTER_DECAY_S = 0.38
+        const val FLUTTER_START_HZ = 12.0
+        const val FLUTTER_END_HZ = 7.0
+        const val FLUTTER_SLOW_S = 0.6
+        const val FLUTTER_DECAY_S = 0.6
         const val BOV_DECAY_S = 0.12
     }
 }
