@@ -1,10 +1,12 @@
 package com.karan.dashboardx.car
 
+import android.graphics.Color
 import androidx.car.app.AppManager
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.CarColor
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -77,8 +79,15 @@ class DashScreen(carContext: CarContext) : Screen(carContext), DefaultLifecycleO
     }
 
     override fun onGetTemplate(): Template {
-        // NavigationTemplate requires an action strip with at least one action.
-        val blank = Action.Builder().setIcon(CarIcons.blank).setOnClickListener {}.build()
+        // NavigationTemplate requires an action strip with at least one action. The host draws it as a
+        // round button: a transparent icon and background, so (where the host honours it) nothing shows.
+        // Only a primary action may have a background colour (else the template is rejected).
+        val blank = Action.Builder()
+            .setIcon(CarIcons.blank)
+            .setFlags(Action.FLAG_PRIMARY)
+            .setBackgroundColor(CarColor.createCustom(Color.TRANSPARENT, Color.TRANSPARENT))
+            .setOnClickListener {}
+            .build()
         return NavigationTemplate.Builder()
             .setActionStrip(ActionStrip.Builder().addAction(blank).build())
             .build()
