@@ -98,6 +98,17 @@ class EngineSynthTest {
         assertTrue("max step $maxStep", maxStep < 0.1f)
     }
 
+    /** A throttle stab is heard at once: 150 ms later the note is already close to its new loudness. */
+    @Test fun render_respondsQuicklyToThrottle() {
+        val s = EngineSynth()
+        s.render(FloatArray(44100), 3000.0, 10.0, 1f)
+        repeat(15) { s.render(FloatArray(441), 3000.0, 90.0, 1f) } // 10 ms blocks, as the audio thread renders
+        val after = FloatArray(441)
+        s.render(after, 3000.0, 90.0, 1f)
+        val steady = rms(render(3000.0, 90.0, 1f, n = 441, warmup = 44100))
+        assertTrue("150 ms after the stab: ${rms(after)} vs steady $steady", rms(after) > 0.93 * steady)
+    }
+
     /** Lifting off at speed (a shift) pops: peaks rise clearly above the steady note at the same rpm. */
     @Test fun render_popsOnLift() {
         for (seed in 1L..4L) {

@@ -12,7 +12,27 @@ class Elm327Test {
     fun session_initSendsSequence() = runBlocking {
         val t = FakeTransport(mapOf("0100" to "4100BE3EB813"))
         Elm327(t, DiagLog()).init()
-        assertEquals(listOf("ATZ", "ATE0", "ATL0", "ATS0", "ATH0", "ATSP0", "0100"), t.sent.take(7))
+        assertEquals(listOf("ATZ", "ATE0", "ATL0", "ATS0", "ATH0", "ATAT1", "ATSP0", "0100"), t.sent.take(8))
+    }
+
+    /** Polls end in "1" (stop after the first ECU replies) so the adapter doesn't wait out its timeout. */
+    @Test
+    fun read_asksForOneReply() = runBlocking {
+        val t = FakeTransport(mapOf("010C1" to "410C1AF8"))
+        assertEquals(1726.0, Elm327(t, DiagLog()).read(Pid.RPM)!!, 0.001)
+        assertEquals(listOf("010C1"), t.sent)
+    }
+
+    /** An adapter that rejects the reply count ("?") is asked again without it, then never with it. */
+    @Test
+    fun read_fallsBackWhenReplyCountRejected() = runBlocking {
+        val log = DiagLog()
+        val t = FakeTransport(mapOf("010C1" to "?", "010C" to "410C1AF8", "01111" to "?", "0111" to "41117F"))
+        val elm = Elm327(t, log)
+        assertEquals(1726.0, elm.read(Pid.RPM)!!, 0.001)
+        assertEquals(49.8, elm.read(Pid.THROTTLE)!!, 0.1)
+        assertEquals(listOf("010C1", "010C", "0111"), t.sent)
+        assertTrue(log.lines().any { "reply count" in it })
     }
 
     @Test
@@ -39,14 +59,14 @@ class Elm327Test {
 
     @Test
     fun session_readDecodes() = runBlocking {
-        val t = FakeTransport(mapOf("010C" to "410C1AF8"))
+        val t = FakeTransport(mapOf("010C1" to "410C1AF8"))
         assertEquals(1726.0, Elm327(t, DiagLog()).read(Pid.RPM)!!, 0.001)
         assertEquals(null, Elm327(t, DiagLog()).read(Pid.SPEED))
     }
 
     @Test
     fun session_commandTimeouts() = runBlocking {
-        val t = FakeTransport(mapOf("0100" to "4100BE3EB813", "010C" to "410C1AF8"))
+        val t = FakeTransport(mapOf("0100" to "4100BE3EB813", "010C1" to "410C1AF8"))
         val elm = Elm327(t, DiagLog())
         elm.init()
         elm.read(Pid.RPM)
@@ -57,7 +77,7 @@ class Elm327Test {
         assertEquals(10_000L, byCmd["0140"])
         assertEquals(2000L, byCmd["ATE0"])
         assertEquals(2000L, byCmd["ATSP0"])
-        assertEquals(2000L, byCmd["010C"])
+        assertEquals(2000L, byCmd["010C1"])
     }
 
     @Test
@@ -97,7 +117,7 @@ class Elm327Test {
     fun log_pollTrafficOnlyForFirstThreeCyclesThenSummary() = runBlocking {
         var now = 0L
         val log = DiagLog()
-        val t = FakeTransport(mapOf("0100" to "4100BE3EB813", "010C" to "410C1AF8"))
+        val t = FakeTransport(mapOf("0100" to "4100BE3EB813", "010C1" to "410C1AF8"))
         val elm = Elm327(t, log) { now }
         elm.init()
         assertTrue(log.lines().any { it.endsWith("> ATZ") })
@@ -107,9 +127,9 @@ class Elm327Test {
             elm.endCycle()
             now += 100
         }
-        assertEquals(3, log.lines().count { it.endsWith("> 010C") })
+        assertEquals(3, log.lines().count { it.endsWith("> 010C1") })
         elm.read(Pid.SPEED) // NO DATA: logged in full even after cycle 3
-        assertTrue(log.lines().any { it.endsWith("> 010D") })
+        assertTrue(log.lines().any { it.endsWith("> 010D1") })
         assertTrue(log.lines().any { it.endsWith("< NO DATA") })
         now = 30_000
         elm.read(Pid.RPM)

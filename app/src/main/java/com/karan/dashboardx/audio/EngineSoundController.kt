@@ -231,7 +231,14 @@ class EngineSoundController(ctx: Context) {
             var rpm = 0.0
             var throttle = 0.0
             var silentSinceNs = -1L
+            var blocks = 0
+            var underruns = 0
             while (keepRunning(gain)) {
+                if (++blocks % UNDERRUN_CHECK_BLOCKS == 0) {
+                    val u = track.underrunCount
+                    if (u > underruns) DashRuntime.diag.add("engine sound: ${u - underruns} buffer underruns (crackle) in the last ${UNDERRUN_CHECK_BLOCKS / 100} s")
+                    underruns = u
+                }
                 val inp = input
                 val fresh = System.nanoTime() - inp.atNs < STALE_MS * 1_000_000L
                 val liveRpm = if (fresh) inp.rpm else null
@@ -286,12 +293,15 @@ class EngineSoundController(ctx: Context) {
             .setSampleRate(SAMPLE_RATE)
             .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
             .build()
+        // Small buffer in low-latency mode: everything queued here is heard late. Two blocks (20 ms)
+        // leave the render loop room to breathe; underruns are logged by the audio thread.
         val min = AudioTrack.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
-        val bytes = if (min > 0) min * 2 else BLOCK * 2 * 4 * 8
+        val bytes = maxOf(min, BLOCK * 2 * 4 * BUFFER_BLOCKS)
         val t = AudioTrack.Builder()
             .setAudioAttributes(attributes)
             .setAudioFormat(format)
             .setTransferMode(AudioTrack.MODE_STREAM)
+            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
             .setBufferSizeInBytes(bytes)
             .build()
         if (t.state != AudioTrack.STATE_INITIALIZED) {
@@ -299,6 +309,7 @@ class EngineSoundController(ctx: Context) {
             t.release()
             null
         } else {
+            DashRuntime.diag.add("engine sound: buffer ${t.bufferSizeInFrames} frames, performance mode ${t.performanceMode}")
             t
         }
     } catch (e: Exception) {
@@ -322,6 +333,8 @@ class EngineSoundController(ctx: Context) {
     private companion object {
         const val SAMPLE_RATE = 44100
         const val BLOCK = 441 // 10 ms
+        const val BUFFER_BLOCKS = 2
+        const val UNDERRUN_CHECK_BLOCKS = 1000 // every 10 s
         const val FADE_MS = 300
         const val STALE_MS = 500L
         /** Silence (no rpm) after which the focus is handed back, so music stops ducking. */

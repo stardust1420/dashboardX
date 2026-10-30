@@ -19,8 +19,9 @@ import kotlin.math.tanh
  * - the upper orders (16 to 32, the "induction" sheen) open up smoothly with rpm and throttle, so
  *   the note gets brighter in a straight line as it revs instead of turning raspy;
  * - loudness rises gently with throttle and rpm, then a mild `tanh` warms it and keeps the peaks low;
- * - rpm and throttle glide through slow followers (~120 ms and ~200 ms), so the steppy OBD readings
- *   become a smooth sweep, and the new block's targets ramp linearly across the block on top of that;
+ * - rpm and throttle glide through short followers (~50 ms), so the steppy OBD readings become a
+ *   smooth sweep without adding audible lag (the dash's 80 ms frame smoother already sits in front),
+ *   and the new block's targets ramp linearly across the block on top of that;
  * - exhaust pops, kept warm rather than crackly: each is a low thump (a damped ~90 Hz resonance)
  *   with a short, muted crack (band-passed noise, ~5 ms). Single pops, quick bursts of 2-3 and now
  *   and then a fuller bang. They play on overrun (throttle < 2 %, rpm > 1500) and when
@@ -182,8 +183,8 @@ class EngineSynth(private val sampleRate: Int = 44100, seed: Long = 1) {
         /** Engine orders (multiples of crank rate) and their base weights. */
         val ORDERS = doubleArrayOf(1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 20.0, 24.0, 32.0)
         val WEIGHTS = doubleArrayOf(0.14, 0.45, 0.12, 1.0, 0.18, 0.55, 0.22, 0.22, 0.13, 0.09, 0.05)
-        const val RPM_GLIDE_S = 0.12
-        const val THR_GLIDE_S = 0.2
+        const val RPM_GLIDE_S = 0.05
+        const val THR_GLIDE_S = 0.05
         const val WARMTH = 0.8
         /** Keeps full-scale peaks around 0.45: comfortable, with headroom over the music. */
         const val MASTER = 0.38

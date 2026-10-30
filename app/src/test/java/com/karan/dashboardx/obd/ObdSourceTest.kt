@@ -17,8 +17,8 @@ import org.junit.Test
 class ObdSourceTest {
     private val script = mapOf(
         "0100" to "4100BE3EB813", "0120" to "NO DATA", "0140" to "NO DATA",
-        "010C" to "410C1AF8", "010D" to "410D3C", "0105" to "41055A",
-        "010F" to "410F4B", "0111" to "41117F", "010B" to "410B22", "0104" to "410440",
+        "010C1" to "410C1AF8", "010D1" to "410D3C", "01051" to "41055A",
+        "010F1" to "410F4B", "01111" to "41117F", "010B1" to "410B22", "01041" to "410440",
     )
 
     private fun source(disp: kotlinx.coroutines.CoroutineDispatcher, now: () -> Long, log: DiagLog = DiagLog(), factory: () -> ObdTransport) =
@@ -103,7 +103,7 @@ class ObdSourceTest {
     @Test
     fun source_computesInstantKml() = runTest {
         val d = StandardTestDispatcher(testScheduler)
-        val maf = script + mapOf("0100" to "4100BE3FB813", "0110" to "411003E8", "010D" to "410D3C", "0111" to "411133")
+        val maf = script + mapOf("0100" to "4100BE3FB813", "01101" to "411003E8", "010D1" to "410D3C", "01111" to "411133")
         val src = source(d, { testScheduler.currentTime }) { FakeTransport(maf) }
         src.start(backgroundScope)
         advanceTimeBy(500)
@@ -114,7 +114,7 @@ class ObdSourceTest {
     @Test
     fun source_clearsInstantKmlOnLinkLoss() = runTest {
         val d = StandardTestDispatcher(testScheduler)
-        val maf = script + mapOf("0100" to "4100BE3FB813", "0110" to "411003E8", "010D" to "410D3C", "0111" to "411133")
+        val maf = script + mapOf("0100" to "4100BE3FB813", "01101" to "411003E8", "010D1" to "410D3C", "01111" to "411133")
         val src = source(d, { testScheduler.currentTime }) { FakeTransport(maf, 60) }
         src.start(backgroundScope)
         advanceTimeBy(500)

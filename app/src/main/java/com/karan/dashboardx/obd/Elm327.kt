@@ -11,6 +11,10 @@ class RetryableObdException(msg: String) : Exception(msg)
  * only for the first [VERBOSE_CYCLES] poll cycles after [init]; after that only replies that carry
  * no data (errors, NO DATA) are logged, plus a one-line summary every [SUMMARY_MS]. The caller
  * marks the end of each poll cycle with [endCycle].
+ *
+ * Speed: [init] turns on adaptive timing (ATAT1), and [read] ends each request with a reply count
+ * of 1 ("010C1"), so the adapter returns as soon as the first ECU answers instead of waiting out
+ * its timeout for more. An adapter that rejects the count ("?") is polled without it from then on.
  */
 class Elm327(
     private val t: ObdTransport,
@@ -23,6 +27,7 @@ class Elm327(
     private var lastRpm: Double? = null
     private var lastSummaryMs = 0L
     private var lastNonData: String? = null
+    private var replyCount = true // append "1" to poll requests until the adapter rejects it
 
     private suspend fun cmd(c: String, timeoutMs: Long = ObdTransport.DEFAULT_TIMEOUT_MS): String {
         log.add("> $c")
@@ -36,7 +41,7 @@ class Elm327(
     /** Runs the adapter init, then [probe]. Throws [RetryableObdException] if the car doesn't answer. */
     suspend fun init(): Set<Pid> {
         cmd("ATZ", ATZ_TIMEOUT_MS)
-        for (c in listOf("ATE0", "ATL0", "ATS0", "ATH0", "ATSP0")) cmd(c)
+        for (c in listOf("ATE0", "ATL0", "ATS0", "ATH0", "ATAT1", "ATSP0")) cmd(c)
         return probe()
     }
 
@@ -70,10 +75,18 @@ class Elm327(
     }
 
     suspend fun read(pid: Pid): Double? {
-        val c = "01" + PidCodec.codeOf(pid)
+        val base = "01" + PidCodec.codeOf(pid)
+        var c = if (replyCount) base + "1" else base
         val verbose = cycle < VERBOSE_CYCLES
         if (verbose) log.add("> $c")
-        val r = t.send(c)
+        var r = t.send(c)
+        if (replyCount && PidCodec.cleanReply(r) == "?") {
+            replyCount = false
+            log.add("adapter rejects the reply count ('$c' -> ?); polling without it")
+            c = base
+            if (verbose) log.add("> $c")
+            r = t.send(c)
+        }
         val v = PidCodec.decode(pid, r)
         polled++
         if (v == null) {
