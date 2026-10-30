@@ -15,8 +15,8 @@ import com.karan.dashboardx.DashRuntime
  * Plays [EngineSynth] live over whatever else is playing (music ducks, it does not pause).
  *
  * - [enabled] is false at construction. Turning it on requests
- *   `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` and starts an audio thread that owns a streaming float
- *   [AudioTrack] and feeds it ~10 ms blocks from the latest [update]. Turning it off abandons focus;
+ *   `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` and starts an audio thread that owns a streaming stereo
+ *   float [AudioTrack] (the same voice on both channels) and feeds it ~10 ms blocks from the latest [update]. Turning it off abandons focus;
  *   the thread fades out over 300 ms, then stops and releases the track and exits.
  * - A null rpm (or no [update] for [STALE_MS]) fades to silence over 300 ms, and back up when
  *   rpm returns. After [IDLE_FOCUS_MS] of silence the audio focus is abandoned (music un-ducks);
@@ -40,9 +40,11 @@ class EngineSoundController(ctx: Context) {
         null
     }
 
+    // Media usage, so Android Auto sends it on the car's full-quality stereo media channel (all
+    // speakers and tweeters) rather than the low-rate mono channel used for prompts and sounds.
     private val attributes = AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_GAME)
-        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .setUsage(AudioAttributes.USAGE_MEDIA)
+        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
         .build()
 
     /** 1 = full, 0.3 = we were asked to duck, 0 = focus lost or denied. Written by focus callbacks. */
@@ -223,6 +225,7 @@ class EngineSoundController(ctx: Context) {
             track.play()
             val synth = EngineSynth(SAMPLE_RATE)
             val block = FloatArray(BLOCK)
+            val stereo = FloatArray(BLOCK * 2)
             val fadeStep = 1f / (FADE_MS * SAMPLE_RATE / 1000f)
             var gain = 0f
             var rpm = 0.0
@@ -253,9 +256,11 @@ class EngineSoundController(ctx: Context) {
                         gain > target -> maxOf(target, gain - fadeStep)
                         else -> gain
                     }
-                    block[i] *= gain
+                    val v = block[i] * gain
+                    stereo[2 * i] = v
+                    stereo[2 * i + 1] = v
                 }
-                val wrote = track.write(block, 0, block.size, AudioTrack.WRITE_BLOCKING)
+                val wrote = track.write(stereo, 0, stereo.size, AudioTrack.WRITE_BLOCKING)
                 if (wrote < 0) {
                     fail("AudioTrack.write error $wrote")
                     break
@@ -279,10 +284,10 @@ class EngineSoundController(ctx: Context) {
         val format = AudioFormat.Builder()
             .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
             .setSampleRate(SAMPLE_RATE)
-            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+            .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
             .build()
-        val min = AudioTrack.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)
-        val bytes = if (min > 0) min * 2 else BLOCK * 4 * 8
+        val min = AudioTrack.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
+        val bytes = if (min > 0) min * 2 else BLOCK * 2 * 4 * 8
         val t = AudioTrack.Builder()
             .setAudioAttributes(attributes)
             .setAudioFormat(format)
@@ -323,7 +328,7 @@ class EngineSoundController(ctx: Context) {
         const val IDLE_FOCUS_MS = 1000L
         const val DUCKED_GAIN = 0.3f
         const val DEFAULT_VOLUME = 0.7f
-        /** Used when rpm is known but throttle is not: mid-load, and clear of the overrun crackle. */
+        /** Used when rpm is known but throttle is not: a light cruising load. */
         const val NEUTRAL_THROTTLE = 10.0
     }
 }

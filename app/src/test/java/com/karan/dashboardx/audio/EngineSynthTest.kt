@@ -39,10 +39,10 @@ class EngineSynthTest {
         return n
     }
 
-    @Test fun firingHz_inlineSix() {
+    @Test fun firingHz_v8() {
         val s = EngineSynth()
-        assertEquals(150.0, s.firingHz(3000.0), 1e-9)
-        assertEquals(40.0, s.firingHz(800.0), 1e-9)
+        assertEquals(200.0, s.firingHz(3000.0), 1e-9)
+        assertEquals(800.0 / 15, s.firingHz(800.0), 1e-9)
     }
 
     @Test fun render_silentAtZeroVolume() {
@@ -56,23 +56,23 @@ class EngineSynthTest {
         assertTrue("hi=$hi lo=$lo", hi > 1.5 * lo)
     }
 
-    @Test fun render_noClipping() {
-        val out = render(7000.0, 100.0, 1f, n = 44100)
-        for (v in out) assertTrue("sample $v", v.isFinite() && v >= -1f && v <= 1f)
-    }
-
-    /** Pre-limiter level stays moderate: tanh(1.1) ~ 0.8, so peaks under 0.8 mean no hard drive. */
-    @Test fun render_headroomAtFullScale() {
-        val peakOn = render(7000.0, 100.0, 1f, n = 44100).maxOf { abs(it) }
-        val peakOverrun = render(6500.0, 0.0, 1f, n = 44100).maxOf { abs(it) }
-        assertTrue("on-throttle peak $peakOn", peakOn < 0.8f)
-        assertTrue("overrun peak $peakOverrun", peakOverrun < 0.8f)
+    /** Kept gentle: even flat out at full volume the peaks stay well under full scale. */
+    @Test fun render_gentlePeaks() {
+        val peak = render(7000.0, 100.0, 1f, n = 44100).maxOf { abs(it) }
+        assertTrue("peak $peak", peak.isFinite() && peak < 0.5f)
     }
 
     @Test fun render_pitchTracksRpm() {
         val zLo = zeroCrossings(lowPass(render(3000.0, 50.0, 1f, n = 44100), 400.0))
         val zHi = zeroCrossings(lowPass(render(6000.0, 50.0, 1f, n = 44100), 400.0))
         assertTrue("zLo=$zLo zHi=$zHi", zHi > 1.6 * zLo)
+    }
+
+    /** A steady note has no noise: one crank revolution later the waveform repeats. */
+    @Test fun render_periodicAtSteadyRpm() {
+        val out = render(3000.0, 40.0, 1f, n = 8820, warmup = 44100)
+        val rev = 882 // 3000 rpm = 50 rev/s = 882 samples
+        for (i in 0 until 4000) assertEquals("sample $i", out[i], out[i + rev], 2e-3f)
     }
 
     @Test fun render_phaseContinuousAcrossBlocks() {
@@ -87,40 +87,33 @@ class EngineSynthTest {
         assertArrayEquals(a, b1 + b2, 1e-6f)
     }
 
-    private fun rms(x: FloatArray, from: Int, to: Int): Double =
-        sqrt((from until to).sumOf { x[it].toDouble() * x[it] } / (to - from))
-
-    /** Warm up at [warmThrottle], then render one 441-sample block at [throttle] (rpm 3000 throughout). */
-    private fun stepBlock(warmThrottle: Double, seed: Long, throttle: Double = 100.0): FloatArray {
-        val s = EngineSynth(seed = seed)
-        s.render(FloatArray(4410), 3000.0, warmThrottle, 1f)
-        val out = FloatArray(441)
-        s.render(out, 3000.0, throttle, 1f)
-        return out
+    /** A sudden OBD jump (idle to 6000 rpm, 10 to 100 % throttle) glides: no clicks between samples. */
+    @Test fun render_glidesOverInputSteps() {
+        val s = EngineSynth()
+        s.render(FloatArray(4410), 800.0, 10.0, 1f)
+        val out = FloatArray(4410)
+        s.render(out, 6000.0, 100.0, 1f)
+        var maxStep = 0f
+        for (i in 1 until out.size) maxStep = maxOf(maxStep, abs(out[i] - out[i - 1]))
+        assertTrue("max step $maxStep", maxStep < 0.1f)
     }
 
-    /**
-     * A 5 -> 100 % throttle step must ramp across the block: the start of the block is still near
-     * the old (quiet) level and the end is at the new one. The voice is a pulse train, so loudness
-     * within a block depends on where the window falls in a firing; each window is therefore
-     * compared with steady blocks over the same window. It starts at 5 %, not 0, so the quiet
-     * reference is not overrun (which crackles at random). Measured margins over seeds 1..4: ramped
-     * first / steady-at-100 first <= 0.51 (unramped ~1); ramped last / steady-at-100 last >= 0.99.
-     */
-    @Test fun render_rampsThrottleAcrossBlock() {
+    /** Lifting off at speed (a shift) pops: peaks rise clearly above the steady note at the same rpm. */
+    @Test fun render_popsOnLift() {
         for (seed in 1L..4L) {
-            val ramped = stepBlock(5.0, seed)
-            val steadyHi = stepBlock(100.0, seed)
-            val first = rms(ramped, 0, 50)
-            val last = rms(ramped, 391, 441)
-            val hiFirst = rms(steadyHi, 0, 50)
-            val hiLast = rms(steadyHi, 391, 441)
-            assertTrue("seed $seed: ramped first=$first steady-100 first=$hiFirst", first < 0.6 * hiFirst)
-            assertTrue("seed $seed: ramped last=$last steady-100 last=$hiLast", last > 0.9 * hiLast)
+            val s = EngineSynth(seed = seed)
+            s.render(FloatArray(44100), 5000.0, 70.0, 1f)
+            val lifted = FloatArray(44100)
+            s.render(lifted, 3200.0, 10.0, 1f)
+            val steady = render(3200.0, 10.0, 1f, n = 44100, warmup = 44100)
+            val pk = lifted.maxOf { abs(it) }
+            val base = steady.maxOf { abs(it) }
+            assertTrue("seed $seed: lifted peak $pk steady peak $base", pk > 1.3 * base)
+            assertTrue("seed $seed: pops stay gentle, peak $pk", pk < 0.6f)
         }
     }
 
-    @Test fun render_deterministicForSeed() {
+    @Test fun render_deterministic() {
         assertArrayEquals(render(6500.0, 0.0, 1f), render(6500.0, 0.0, 1f), 0f)
     }
 }

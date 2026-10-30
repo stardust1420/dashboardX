@@ -109,7 +109,7 @@ The two buttons on the car screen are icons, with no text:
 - **Style** (a gauge icon: an arc with a needle and a centre dot): cycles Racing, HUD, Arcade, Luxury and Cluster layouts. The choice is remembered.
 - **Sound** (a speaker icon): a speaker with a cross means the engine sound is off, a speaker with sound waves means it is on. It starts **off** every time.
 
-The engine sound plays through the car speakers and lowers (ducks) your music instead of pausing it. When there is no RPM for about a second (engine off, adapter unplugged) it lets go and your music returns to full volume; it ducks again when RPM comes back. If the sound ever fails, the Sound icon switches back to off by itself.
+The engine sound is a smooth V8 note in the style of a Lexus: it rises evenly in pitch and brightness with the revs, with no hiss. Soft exhaust pops play when you lift off sharply, shift gear (the revs drop fast) or coast at high revs; steady driving stays clean. It plays in stereo on the car's media channel, so it uses all the speakers, and it lowers (ducks) your music instead of pausing it. When there is no RPM for about a second (engine off, adapter unplugged) it lets go and your music returns to full volume; it ducks again when RPM comes back. If the sound ever fails, the Sound icon switches back to off by itself.
 
 ## 6. Share a diagnostics log
 
@@ -139,7 +139,7 @@ The log includes the connection status, which sensors the car supports and a tim
 - **The drive mode is inferred.** The Luxury and Cluster styles show SPORT, COMFORT or ECO. The Verna has no mode switch to read, so it is worked out from recent throttle and RPM: a hard pull shows SPORT within a second or two, and it settles back to ECO or COMFORT several seconds after you ease off.
 - **The gear is an estimate.** The car does not report it (Diagnostics shows "gear PID A4: supported" if yours does), so it is worked out from RPM ÷ speed. It shows "-" below 8 km/h, and during a shift it holds the old gear for up to 1.5 s before changing. It slowly corrects itself if the tyres or final drive differ from the stock Verna 1.6 automatic.
 - **The engine sound is delayed** by about 0.1 to 0.2 seconds, and it starts off on every drive.
-- **The Verna throttle may idle at 10 to 18 %.** The infinity (∞) fuel economy reading only appears when the throttle reads near zero while moving, so it may show rarely or never on this car. The exhaust crackle does not depend on that: it also plays when you lift off sharply or the revs drop fast (a gear shift).
+- **The Verna throttle may idle at 10 to 18 %.** The infinity (∞) fuel economy reading only appears when the throttle reads near zero while moving, so it may show rarely or never on this car. The exhaust pops do not depend on that: they also play when you lift off sharply or the revs drop fast.
 - **Not for the Play Store.** It is a personal sideloaded app. Android Auto only shows it when it was installed through KingInstaller (section 2), and a future Android Auto update may close that gap.
 
 ## 8. Troubleshooting

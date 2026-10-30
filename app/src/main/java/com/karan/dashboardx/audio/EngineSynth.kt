@@ -8,54 +8,49 @@ import kotlin.math.sin
 import kotlin.math.tanh
 
 /**
- * Procedural inline-six engine voice ("sporty racing game", not a recording). Pure Kotlin so it
- * unit-tests on the JVM.
+ * Procedural V8 engine voice in the smooth, linear style of a Lexus V8 (not a recording). Pure
+ * Kotlin so it unit-tests on the JVM.
  *
- * Built from firing events rather than sine partials, which is what makes it sound like an engine:
- * - six cylinders fire evenly, three per crank revolution; each firing is a sharp-rise, slower-decay
- *   exhaust pulse. Each cylinder has a fixed level offset (a real engine's small imbalance, heard as
- *   the straight-six "burble") plus random cycle-to-cycle variation that is largest at idle;
- * - the pulse train goes through fixed exhaust resonances (a sub-bass rumble, a low body, a mid
- *   "honk" that opens with throttle and a high rasp band that grows with throttle and rpm), then an
- *   asymmetric soft clip that adds growl under load;
- * - band-passed intake noise, pulsed by the firings, under throttle;
- * - crackle: pops, short bursts of pops and the odd louder bang, each with a low thump. It plays on
- *   overrun (throttle < 2 %, rpm > 1500) and, more strongly, while decelerating: a sharp throttle
- *   lift or a fast rpm drop (a gear shift), measured against slow followers of throttle and rpm.
- *   The deceleration trigger is what lets it fire on cars whose throttle never reads near zero;
- * - master gain (kept moderate so the pre-limiter sum stays well under 1) and `tanh` limiting.
+ * The note is built from clean engine-order partials, with no noise or random variation, so it
+ * reads as a steady musical tone rather than hiss:
+ * - a V8 fires four times per crank revolution, so order 4 is the fundamental; orders 8 and 12 give
+ *   it body, and orders 2 and 6 add the low cross-plane hum. A faint order 1 and 3 give a soft
+ *   burble at idle that fades away as revs rise;
+ * - the upper orders (16 to 32, the "induction" sheen) open up smoothly with rpm and throttle, so
+ *   the note gets brighter in a straight line as it revs instead of turning raspy;
+ * - loudness rises gently with throttle and rpm, then a mild `tanh` warms it and keeps the peaks low;
+ * - rpm and throttle glide through slow followers (~120 ms and ~200 ms), so the steppy OBD readings
+ *   become a smooth sweep, and the new block's targets ramp linearly across the block on top of that;
+ * - exhaust pops, kept warm rather than crackly: each is a low thump (a damped ~90 Hz resonance)
+ *   with a short, muted crack (band-passed noise, ~5 ms). Single pops, quick bursts of 2-3 and now
+ *   and then a fuller bang. They play on overrun (throttle < 2 %, rpm > 1500) and when
+ *   decelerating: a sharp throttle lift or a fast rpm drop (a gear shift), measured against slow
+ *   followers of throttle and rpm, which lets them fire on cars whose throttle never reads near
+ *   zero. Steady cruising stays clean.
  *
- * State (phase, pulse envelopes, filters, RNG, last rpm/throttle) carries across [render] calls, so
- * consecutive blocks join seamlessly; rpm and throttle ramp linearly from the previous block's
- * values to the new ones across each block. Not thread-safe: one rendering thread.
+ * State (crank phase, followers, pop filters, RNG) carries across [render] calls, so consecutive blocks join
+ * seamlessly. Not thread-safe: one rendering thread.
  */
 class EngineSynth(private val sampleRate: Int = 44100, seed: Long = 1) {
-    private val rng = Random(seed)
     private val sr = sampleRate.toDouble()
+    private val rng = Random(seed)
 
-    /** Crank phase in revolutions over one four-stroke cycle (0 until 2). */
+    /** Crank phase in revolutions (0 until 1); every order is a whole number, so it wraps at 1. */
     private var phase = 0.0
-    private var nextFiring = 0 // index 0..5 of the next cylinder to fire, at phase nextFiring / 3
     private var lastRpm = Double.NaN
     private var lastThrottle = Double.NaN
-
-    // Exhaust pulse: difference of two decaying exponentials (fast attack, slower decay).
-    private var pulseSlow = 0.0
-    private var pulseFast = 0.0
-    private val fastDecay = exp(-1.0 / (0.00035 * sampleRate))
-    private var dcState = 0.0
-
-    private val sub = Resonator(55.0, 0.8)
-    private val body = Resonator(100.0, 0.9)
-    private val honk = Resonator(380.0, 1.4)
-    private val rasp = Resonator(1500.0, 2.2)
-    private val intake = Resonator(2600.0, 0.9)
-    private val thump = Resonator(85.0, 3.0)
+    private var rpmGlide = Double.NaN
+    private var thrGlide = Double.NaN
+    private val rpmA = 1 - exp(-1.0 / (RPM_GLIDE_S * sampleRate))
+    private val thrA = 1 - exp(-1.0 / (THR_GLIDE_S * sampleRate))
 
     private var popEnv = 0.0
-    private var popTone = 0.0 // LP state for the pop's crack
-    private var popThump = 1.0 // thump gain of the current pop (bigger for a bang)
-    private val popDecay = exp(-1.0 / (0.006 * sampleRate)) // ~6 ms pops
+    private var popGain = 1.0 // thump gain of the current pop (bigger for a bang)
+    private val popDecay = exp(-1.0 / (0.005 * sampleRate)) // ~5 ms pops
+    private val crackBand = Resonator(1600.0, 0.8)
+    private var crackLp = 0.0 // one-pole low-pass that takes the edge off the crack
+    private val crackLpA = 1 - exp(-2 * PI * 3500.0 / sampleRate)
+    private val thump = Resonator(90.0, 4.0)
     private var burstLeft = 0 // pops still to come in the current burst
     private var burstGap = 0 // samples until the next pop of the burst may fire
 
@@ -64,130 +59,109 @@ class EngineSynth(private val sampleRate: Int = 44100, seed: Long = 1) {
     private var rpmSlow = Double.NaN
     private var crackle = 0.0 // 0..1, smoothed once per block
 
-    /** Firing frequency of a four-stroke inline six: three power strokes per revolution. */
-    fun firingHz(rpm: Double): Double = rpm / 60.0 * 3.0
+    /** Firing frequency of a four-stroke V8: four power strokes per revolution. */
+    fun firingHz(rpm: Double): Double = rpm / 60.0 * 4.0
 
     fun render(out: FloatArray, rpm: Double, throttlePct: Double, volume: Float) {
         val n = out.size
         if (n == 0) return
         val rpmEnd = rpm.coerceIn(0.0, 9000.0)
-        val thrEnd = throttlePct.coerceIn(0.0, 100.0)
+        val thrEnd = throttlePct.coerceIn(0.0, 100.0) / 100.0
         val rpmStart = if (lastRpm.isNaN()) rpmEnd else lastRpm
         val thrStart = if (lastThrottle.isNaN()) thrEnd else lastThrottle
+        if (rpmGlide.isNaN()) rpmGlide = rpmStart
+        if (thrGlide.isNaN()) thrGlide = thrStart
         val vol = volume.coerceIn(0f, 1f).toDouble()
-        val dcA = 1 - exp(-2 * PI * 25.0 / sr)
+        val nyquistSafe = 0.4 * sr
 
-        // The rasp band climbs a little with revs; retuned once per block (rpm moves slowly).
-        val rpmMidN = ((rpmStart + rpmEnd) / 2 / 7000.0).coerceIn(0.0, 1.0)
-        rasp.tune(1300.0 + 900.0 * rpmMidN, 2.2)
-
-        // Crackle level for this block: overrun, or a lift / rpm drop against the slow followers.
-        if (thrSlow.isNaN()) thrSlow = thrEnd / 100.0
+        // Pop level for this block: overrun, or a lift / rpm drop against the slow followers.
+        if (thrSlow.isNaN()) thrSlow = thrEnd
         if (rpmSlow.isNaN()) rpmSlow = rpmEnd
-        val lift = (thrSlow - thrEnd / 100.0) * 3.0
+        val lift = (thrSlow - thrEnd) * 3.0
         val drop = (rpmSlow - rpmEnd) / 1500.0
-        val overrun = if (thrEnd < 2.0 && rpmEnd > 1500.0) 0.6 else 0.0
+        val overrun = if (thrEnd < 0.02 && rpmEnd > 1500.0) 0.6 else 0.0
         val target = if (rpmEnd > 1100.0) maxOf(overrun, lift, drop).coerceIn(0.0, 1.0) else 0.0
         val follow = 1 - exp(-n / (0.35 * sr))
-        thrSlow += follow * (thrEnd / 100.0 - thrSlow)
+        thrSlow += follow * (thrEnd - thrSlow)
         rpmSlow += follow * (rpmEnd - rpmSlow)
         crackle += (if (target > crackle) 0.5 else 1 - exp(-n / (0.4 * sr))) * (target - crackle)
 
         for (i in 0 until n) {
             val k = (i + 1).toDouble() / n
-            val r = rpmStart + (rpmEnd - rpmStart) * k
-            val thr = (thrStart + (thrEnd - thrStart) * k) / 100.0
+            rpmGlide += rpmA * (rpmStart + (rpmEnd - rpmStart) * k - rpmGlide)
+            thrGlide += thrA * (thrStart + (thrEnd - thrStart) * k - thrGlide)
+            val r = rpmGlide
+            val thr = thrGlide
             val rpmN = (r / 7000.0).coerceIn(0.0, 1.0)
-            val load = 0.3 + 0.7 * thr
+            // Brightness grows linearly with revs and throttle: 0.2 at idle, 1 at full song.
+            val bright = 0.2 + 0.8 * (0.6 * rpmN + 0.4 * thr)
+            val burble = (1 - 1.6 * rpmN).coerceAtLeast(0.0)
 
-            // Fire the next cylinder when the crank reaches its slot (every 1/3 revolution).
             phase += r / 60.0 / sr
-            val slot = nextFiring / 3.0
-            if (phase >= slot && (nextFiring != 0 || phase < 1.0)) {
-                // Cycle-to-cycle roughness: large at a lumpy idle, smooth at high revs.
-                val jitter = (0.22 - 0.17 * rpmN) * rng.nextGaussian()
-                val amp = CYLINDER_LEVEL[nextFiring] * (1 + jitter).coerceAtLeast(0.2)
-                pulseSlow += amp
-                pulseFast += amp
-                nextFiring = (nextFiring + 1) % 6
+            if (phase >= 1.0) phase -= 1.0
+            val revHz = r / 60.0
+
+            var v = 0.0
+            for (j in ORDERS.indices) {
+                val order = ORDERS[j]
+                val hz = order * revHz
+                if (hz >= nyquistSafe) continue
+                var w = WEIGHTS[j]
+                if (order >= 16) w *= bright * bright
+                if (order == 1.0 || order == 3.0) w *= burble
+                // Fade partials out just below the alias limit instead of cutting them.
+                val edge = ((nyquistSafe - hz) / (0.1 * sr)).coerceAtMost(1.0)
+                v += w * edge * sin(2 * PI * order * phase)
             }
-            if (phase >= 2.0) phase -= 2.0
 
-            // Pulse length follows the firing period, so slow pulses separate and fast ones merge.
-            val period = 1.0 / firingHz(r.coerceAtLeast(300.0))
-            val tau = (0.32 * period).coerceIn(0.0012, 0.012)
-            pulseSlow *= exp(-1.0 / (tau * sr))
-            pulseFast *= fastDecay
-            val raw = pulseSlow - pulseFast
-            dcState += dcA * (raw - dcState)
-            val src = raw - dcState
+            val level = (0.45 + 0.55 * thr) * (0.55 + 0.45 * rpmN)
+            val warm = tanh(WARMTH * v) / WARMTH
 
-            // Exhaust: low body, mid honk opening with throttle, high rasp with throttle and revs.
-            // Load scales it per sample, so throttle changes ramp smoothly between firings.
-            val exhaust = load * 0.55 * src +
-                load * 1.4 * sub.next(src) +
-                load * 2.0 * body.next(src) +
-                load * (0.5 + 0.9 * thr) * honk.next(src) +
-                load * thr * (0.25 + 0.95 * rpmN) * rasp.next(src)
-
-            // Growl: asymmetric soft clip (even harmonics), driven harder under load at high revs.
-            val drive = 1.0 + 2.2 * thr * (0.3 + 0.7 * rpmN)
-            val growl = (tanh(drive * (exhaust + GROWL_BIAS)) - tanh(drive * GROWL_BIAS)) / drive
-
-            // Intake: band-passed noise breathing with each firing, mostly under throttle.
-            val white = rng.nextDouble() * 2 - 1
-            val breath = intake.next(white) * (0.15 + 0.85 * thr) * (0.3 + 0.7 * rpmN) * (0.4 + 2.0 * raw)
-
-            // Crackle: single pops or quick bursts of 2-4, now and then a louder bang.
+            // Pops: single ones or quick bursts of 2-3, now and then a fuller bang.
             if (burstGap > 0) burstGap--
             if (crackle > 0.05 && popEnv < 0.01 && burstGap == 0) {
                 if (burstLeft > 0) {
                     burstLeft--
                     firePop()
-                } else if (rng.nextDouble() < crackle * (6.0 + 14.0 * rpmN) / sr) {
-                    burstLeft = if (rng.nextDouble() < 0.4) 1 + rng.nextInt(3) else 0
+                } else if (rng.nextDouble() < crackle * (3.0 + 7.0 * rpmN) / sr) {
+                    burstLeft = if (rng.nextDouble() < 0.35) 1 + rng.nextInt(2) else 0
                     firePop()
                 }
             }
-            var pop = 0.0
-            if (popEnv > 1e-4) {
-                popTone += 0.3 * (white - popTone)
-                pop = popEnv * popTone
+            val pop = if (popEnv > 1e-4) {
+                crackLp += crackLpA * (crackBand.next(rng.nextDouble() * 2 - 1) - crackLp)
+                val p = popEnv * crackLp * CRACK + thump.next(popEnv * popEnv) * THUMP * popGain
                 popEnv *= popDecay
+                p
             } else {
                 popEnv = 0.0
+                thump.next(0.0) * THUMP * popGain // let the thump ring out
             }
-            val bang = thump.next(pop) * 2.5 * popThump
 
-            val sum = (growl * 0.55 + breath * 0.5 + pop * 0.8 + bang) * MASTER * vol
-            out[i] = tanh(sum).toFloat()
+            out[i] = (tanh((warm * level * MASTER + pop * POP_LEVEL) * vol * 1.2) / 1.2).toFloat()
         }
         lastRpm = rpmEnd
         lastThrottle = thrEnd
     }
 
     private fun firePop() {
-        val big = rng.nextDouble() < 0.15
-        popEnv = if (big) 1.0 else 0.4 + 0.5 * rng.nextDouble()
-        popThump = if (big) 1.8 else 1.0
-        burstGap = ((0.025 + 0.05 * rng.nextDouble()) * sr).toInt() // 25-75 ms between burst pops
+        val big = rng.nextDouble() < 0.12
+        popEnv = if (big) 1.0 else 0.45 + 0.4 * rng.nextDouble()
+        popGain = if (big) 1.3 else 1.0
+        burstGap = ((0.04 + 0.05 * rng.nextDouble()) * sr).toInt() // 40-90 ms between burst pops
     }
 
     /** Two-pole band-pass (RBJ, 0 dB peak); state carries across blocks. */
     private inner class Resonator(hz: Double, q: Double) {
-        private var b0 = 0.0
-        private var a1 = 0.0
-        private var a2 = 0.0
+        private val b0: Double
+        private val a1: Double
+        private val a2: Double
         private var x1 = 0.0
         private var x2 = 0.0
         private var y1 = 0.0
         private var y2 = 0.0
 
         init {
-            tune(hz, q)
-        }
-
-        fun tune(hz: Double, q: Double) {
             val w0 = 2 * PI * hz / sr
             val alpha = sin(w0) / (2 * q)
             val a0 = 1 + alpha
@@ -205,9 +179,17 @@ class EngineSynth(private val sampleRate: Int = 44100, seed: Long = 1) {
     }
 
     private companion object {
-        /** Small fixed per-cylinder differences, in firing order. */
-        val CYLINDER_LEVEL = doubleArrayOf(1.00, 0.91, 1.06, 0.95, 1.03, 0.88)
-        const val GROWL_BIAS = 0.2
-        const val MASTER = 1.35
+        /** Engine orders (multiples of crank rate) and their base weights. */
+        val ORDERS = doubleArrayOf(1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 20.0, 24.0, 32.0)
+        val WEIGHTS = doubleArrayOf(0.14, 0.45, 0.12, 1.0, 0.18, 0.55, 0.22, 0.22, 0.13, 0.09, 0.05)
+        const val RPM_GLIDE_S = 0.12
+        const val THR_GLIDE_S = 0.2
+        const val WARMTH = 0.8
+        /** Keeps full-scale peaks around 0.45: comfortable, with headroom over the music. */
+        const val MASTER = 0.38
+        const val CRACK = 0.8
+        const val THUMP = 6.0
+        /** Pops stand out clearly above the note on a lift or shift, but stay short and well under full scale. */
+        const val POP_LEVEL = 0.4
     }
 }
