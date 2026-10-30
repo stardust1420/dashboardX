@@ -1,8 +1,8 @@
 package com.karan.dashboardx.render
 
 import com.karan.dashboardx.alerts.Warning
-import com.karan.dashboardx.calc.DriveMode
 import com.karan.dashboardx.data.ConnectionStatus
+import com.karan.dashboardx.data.DriveMode
 
 /**
  * Everything a renderer needs for one frame. RPM, speed and throttle are smoothed; the other
@@ -27,7 +27,7 @@ data class FrameModel(
     val noCarData: Boolean = false,
     /** Estimated automatic-gearbox gear (1..6), or null when it cannot be told (slow, mid-shift). */
     val gear: Int? = null,
-    /** Inferred from recent throttle and rpm (the Verna has no mode switch to read). */
+    /** Picked by the driver on the mode selector ([com.karan.dashboardx.DashRuntime.cycleDriveMode]). */
     val driveMode: DriveMode = DriveMode.COMFORT,
     /** Wall-clock time of the frame (for a clock display). */
     val wallMs: Long = 0L,

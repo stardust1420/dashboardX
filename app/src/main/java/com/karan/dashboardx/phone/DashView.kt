@@ -33,7 +33,7 @@ class DashView(ctx: Context) : View(ctx) {
     init {
         DashRuntime.init(ctx)
         isClickable = true
-        contentDescription = "Dashboard. Tap to change style."
+        contentDescription = "Dashboard. Tap the mode selector to change drive mode, anywhere else to change style."
         setBackgroundColor(Color.BLACK)
     }
 
@@ -47,7 +47,16 @@ class DashView(ctx: Context) : View(ctx) {
             MotionEvent.ACTION_UP -> {
                 val dx = e.x - downX
                 val dy = e.y - downY
-                if (dx * dx + dy * dy <= slop * slop) performClick()
+                if (dx * dx + dy * dy <= slop * slop) {
+                    // On the drive-mode selector: step the mode. Anywhere else: change the style.
+                    val hit = renderer?.modeHit?.contains(vp.toLogicalX(e.x), vp.toLogicalY(e.y)) == true
+                    if (hit) {
+                        DashRuntime.cycleDriveMode()
+                        invalidate()
+                    } else {
+                        performClick()
+                    }
+                }
                 return true
             }
         }

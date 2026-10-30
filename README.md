@@ -84,7 +84,7 @@ Open DashboardX on the phone. Until you choose an adapter or turn on Demo mode, 
 
 In Demo mode a small **DEMO** tag sits in the top-left corner, so fake data is never mistaken for the car.
 
-On the phone, a tap on the dashboard (anywhere except the buttons) cycles the style: Racing, HUD, Arcade, Luxury, Cluster.
+On the phone, a tap on the dashboard (anywhere except the buttons and the drive-mode selector) cycles the style: Racing, HUD, Arcade, Luxury, Cluster, Most Wanted, Cockpit. A tap on the **COMFORT / SPORT / SPORT+** selector steps the drive mode instead.
 
 The speaker button next to the gear turns the engine sound on and off on the phone, the same way as the Sound icon in the car (see section 5). It starts **off** every time the app opens. It also switches off when you leave the app. Demo mode is a good way to try it.
 
@@ -114,7 +114,8 @@ Other settings on the same screen: engine sound volume (0 to 100 %), fuel calibr
 4. It should connect to the adapter within about 10 seconds.
 
 On the car screen the dashboard fills the whole app area:
-- **Tap anywhere on the dashboard** to cycle the style: Racing, HUD, Arcade, Luxury, Cluster. The choice is remembered.
+- **Tap anywhere on the dashboard** to cycle the style: Racing, HUD, Arcade, Luxury, Cluster, Most Wanted, Cockpit. The choice is remembered.
+- **Tap the COMFORT / SPORT / SPORT+ selector** (every style has one) to step the drive mode. The choice is remembered and shared by all styles.
 - **Sound** (the one button, a speaker icon in the top-right corner): a speaker with a cross means the engine sound is off, a speaker with sound waves means it is on. It starts **off** every time.
 
 The engine sound is a smooth V8 note in the style of a Lexus: it rises evenly in pitch and brightness with the revs, with no hiss. Soft exhaust pops play when you lift off sharply, shift gear (the revs drop fast) or coast at high revs; steady driving stays clean. It plays in stereo on the car's media channel, so it uses all the speakers, and it lowers (ducks) your music instead of pausing it. When there is no RPM for about a second (engine off, adapter unplugged) it lets go and your music returns to full volume; it ducks again when RPM comes back. If the sound ever fails, the Sound icon switches back to off by itself.
@@ -144,7 +145,7 @@ The log includes the connection status, which sensors the car supports and a tim
   Example: the app says 16.0, the real figure is 14.5, and the current factor is 1.0. The new factor is 1.0 x (16.0 / 14.5) = 1.10. Enter it in Settings (range 0.5 to 1.5). A higher factor means more fuel and a lower km/l.
 
   The trip average resets only when DashboardX starts its data source: when the phone app or the car screen is opened while DashboardX was fully closed (neither showing), when you pick an adapter, or when you switch Demo mode on or off. It does **not** reset when the adapter drops out and reconnects, or when you change other settings (volume, calibration, engine size, redline, coolant warning).
-- **The drive mode is inferred.** The Luxury and Cluster styles show SPORT, COMFORT or ECO. The Verna has no mode switch to read, so it is worked out from recent throttle and RPM: a hard pull shows SPORT within a second or two, and it settles back to ECO or COMFORT several seconds after you ease off.
+- **The drive mode is for show.** The Verna has no mode switch to read or set, so Comfort / Sport / Sport+ is whatever you pick on the selector. It changes the look (the Luxury floor glow, the highlighted row), not the car or the engine sound.
 - **The gear is an estimate.** The car does not report it (Diagnostics shows "gear PID A4: supported" if yours does), so it is worked out from RPM ÷ speed. It shows "-" below 8 km/h, and during a shift it holds the old gear for up to 1.5 s before changing. It slowly corrects itself if the tyres or final drive differ from the stock Verna 1.6 automatic.
 - **The engine sound is delayed** by about 0.1 to 0.2 seconds, and it starts off on every drive.
 - **The Verna throttle may idle at 10 to 18 %.** The infinity (∞) fuel economy reading only appears when the throttle reads near zero while moving, so it may show rarely or never on this car. The exhaust pops do not depend on that: they also play when you lift off sharply or the revs drop fast.

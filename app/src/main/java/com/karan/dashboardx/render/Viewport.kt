@@ -4,6 +4,12 @@ import kotlin.math.min
 
 /** Fit of the 800x480 logical canvas into a physical area, centered. */
 data class Viewport(val scale: Float, val dx: Float, val dy: Float) {
+    /** Physical x (view or surface pixels) to the logical 800×480 space. */
+    fun toLogicalX(x: Float): Float = (x - dx) / scale
+
+    /** Physical y to the logical 800×480 space. */
+    fun toLogicalY(y: Float): Float = (y - dy) / scale
+
     companion object {
         const val LOGICAL_W = 800f
         const val LOGICAL_H = 480f

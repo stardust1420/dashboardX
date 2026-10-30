@@ -7,8 +7,8 @@ import android.graphics.Paint
 import android.graphics.Typeface
 
 /**
- * The three OFL fonts, loaded from assets/fonts (no R class), and the optional car photo for the
- * Luxury style. Create once per host, not per frame.
+ * The three OFL fonts, loaded from assets/fonts (no R class), the optional car photo for the
+ * Luxury style and the cover art for the Most Wanted style. Create once per host, not per frame.
  */
 class Fonts(ctx: Context) {
     private val assets = ctx.applicationContext.assets
@@ -17,6 +17,15 @@ class Fonts(ctx: Context) {
     val carPhoto: Bitmap? by lazy {
         try {
             assets.open("car/verna.png").use(BitmapFactory::decodeStream)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** assets/art/most_wanted.png (the NFS: Most Wanted cover, 600×900), or null if absent or unreadable. */
+    val mostWantedArt: Bitmap? by lazy {
+        try {
+            assets.open("art/most_wanted.png").use(BitmapFactory::decodeStream)
         } catch (e: Exception) {
             null
         }

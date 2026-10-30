@@ -11,7 +11,6 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import com.karan.dashboardx.alerts.Warning
-import com.karan.dashboardx.calc.DriveMode
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,7 +21,7 @@ import kotlin.math.abs
  * (speed on the left, rpm on the right, mirrored) whose bands fill from the bottom with a glowing
  * leading edge; the rpm gauge holds a decaying peak marker. Thin strips inside the gauges show
  * coolant (left) and throttle (right). Centre: trip pill, big speed, a P R N D row with the estimated
- * gear. Bottom: economy, clock, drive mode, intake air and oil, with small icons.
+ * gear. Bottom: economy, clock, drive-mode selector, intake air and oil, with small icons.
  *
  * Chevron geometry: a gauge runs from its bottom point up to the apex and on to its top point, and
  * y is linear in the fraction (0 at the bottom, 1 at the top), so a fill level is a clip at one y.
@@ -37,7 +36,6 @@ class ClusterRenderer(private val fonts: Fonts) : GaugeRenderer {
         const val C_BLUE = 0xFF3A5BFF.toInt()
         const val C_RED = 0xFFFF2D3D.toInt()
         const val C_ORANGE = 0xFFFF7A1A.toInt()
-        const val C_ECO = 0xFF35D0A0.toInt()
 
         const val SPEED_MAX = 200.0
 
@@ -192,7 +190,10 @@ class ClusterRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val brand = text(sansMedium, 15f, C_TEXT, Paint.Align.CENTER).apply { letterSpacing = 0.4f }
     private val prndText = text(sansMedium, 24f, C_DIM, Paint.Align.CENTER)
     private val gearSub = text(sansMedium, 17f, C_TEXT, Paint.Align.LEFT)
-    private val modeText = text(sansMedium, 15f, C_RED, Paint.Align.CENTER).apply { letterSpacing = 0.08f }
+    private val modeSel = ModeSelector(264f, 418f, 540f, 462f,
+        text(sansMedium, 15f, C_TEXT, Paint.Align.CENTER).apply { letterSpacing = 0.02f },
+        intArrayOf(C_TEXT, C_ORANGE, C_RED), C_SOFT, 0xFF0B0F18.toInt(), 22f)
+    override val modeHit: RectF get() = modeSel.hit
     private val bottomLeft = text(sans, 17f, C_TEXT, Paint.Align.LEFT)
     private val bottomRight = text(sans, 17f, C_TEXT, Paint.Align.RIGHT)
     private val midScale = middleOffset(scaleLeft)
@@ -340,12 +341,6 @@ class ClusterRenderer(private val fonts: Fonts) : GaugeRenderer {
         c.drawText("rpm ×1000", Viewport.LOGICAL_W - BX - 6f, TOP - 14f, unitRight)
     }
 
-    private fun modeColor(m: DriveMode) = when (m) {
-        DriveMode.SPORT -> C_RED
-        DriveMode.COMFORT -> C_TEXT
-        DriveMode.ECO -> C_ECO
-    }
-
     private fun drawCentre(c: Canvas, f: FrameModel) {
         c.drawRoundRect(pillRect, 15f, 15f, pill)
         c.drawRoundRect(pillRect, 15f, 15f, pillEdge)
@@ -390,8 +385,7 @@ class ClusterRenderer(private val fonts: Fonts) : GaugeRenderer {
         val kml = f.instantKml
         c.drawText(tKml.get(textKey(kml, 10.0)) { Fmt.kml(kml) + " km/l" }, 66f, by, bottomLeft)
         c.drawText(tClock.get(f.wallMs / 60_000L) { date.time = f.wallMs; clock.format(date) }, 210f, by, bottomLeft)
-        modeText.color = modeColor(f.driveMode)
-        c.drawText(f.driveMode.name, 400f, by, modeText)
+        modeSel.draw(c, f.driveMode)
         val iat = f.iat
         val iatStr = tIat.get(textKey(iat)) { "Air " + Fmt.temp(iat, false) }
         c.drawText(iatStr, 612f, by, bottomRight)

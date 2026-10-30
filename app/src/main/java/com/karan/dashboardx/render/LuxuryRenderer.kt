@@ -14,7 +14,7 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import com.karan.dashboardx.alerts.Warning
-import com.karan.dashboardx.calc.DriveMode
+import com.karan.dashboardx.data.DriveMode
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,7 +22,8 @@ import java.util.Locale
 /**
  * Style D, "Luxury": a premium-infotainment drive-mode screen, staged like a showroom.
  *
- * Left: the inferred drive mode with gear and speed, a mode track (Eco / Comfort / Sport), a menu
+ * Left: the picked drive mode with gear and speed, a mode track (Comfort / Sport / Sport+, tap to
+ * change; it is this style's [modeHit]), a menu
  * of live readings whose rows carry a level bar, one row highlighted, and a strip of secondary
  * readings. Right: the car under a spotlight on a glossy floor with its reflection; the floor glow
  * takes the mode's colour and brightens with rpm. The car is [Fonts.carPhoto] when present, else a
@@ -39,7 +40,7 @@ class LuxuryRenderer(private val fonts: Fonts) : GaugeRenderer {
         const val C_RED = 0xFFFF3B2F.toInt()
         const val C_COMFORT = 0xFFDDE6F2.toInt()
         const val C_COMFORT_GLOW = 0xFF6EA8FF.toInt()
-        const val C_ECO = 0xFF35D0A0.toInt()
+        const val C_SPORT = 0xFFFF8A1F.toInt()
 
         const val LEFT = 44f
         const val ROW_RIGHT = 380f
@@ -110,7 +111,7 @@ class LuxuryRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val clockText = text(sans, 17f, C_SOFT)
     private val modeText = text(sansLight, 50f, C_RED).apply { letterSpacing = 0.02f }
     private val subText = text(sans, 21f, C_RED)
-    private val trackText = text(sans, 12f, C_DIM)
+    private val trackText = text(sansMedium, 18f, C_SOFT)
     private val rowLabel = text(sansMedium, 18f, C_TEXT)
     private val rowValue = text(sans, 18f, C_SOFT, Paint.Align.RIGHT)
     private val statLabel = text(sans, 12f, C_DIM)
@@ -126,6 +127,7 @@ class LuxuryRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val chevronPath = Path().apply { moveTo(28f, 296f); lineTo(18f, 316f); lineTo(28f, 336f) }
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val trackRect = RectF()
+    override val modeHit = RectF(LEFT - 14f, TRACK_Y - 40f, LEFT + 3 * TRACK_SEG + 2 * TRACK_GAP + 14f, TRACK_Y + 20f)
     private val radio = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.5f; color = C_SOFT }
     private val radioDot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = C_TEXT }
     private val rowFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -147,15 +149,15 @@ class LuxuryRenderer(private val fonts: Fonts) : GaugeRenderer {
             intArrayOf(color, Color.argb(90, Color.red(color), Color.green(color), Color.blue(color)), Color.TRANSPARENT),
             floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
     }
-    private val glowSport = glowPaint(C_RED)
+    private val glowSport = glowPaint(C_SPORT)
     private val glowComfort = glowPaint(C_COMFORT_GLOW)
-    private val glowEco = glowPaint(C_ECO)
+    private val glowSportPlus = glowPaint(C_RED)
     private fun lineShader(color: Int) = LinearGradient(CAR_CX - 220f, 0f, CAR_CX + 220f, 0f,
         intArrayOf(Color.TRANSPARENT, color, Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
     private val floorLine = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 2f }
-    private val floorSport = lineShader(C_RED)
+    private val floorSport = lineShader(C_SPORT)
     private val floorComfort = lineShader(C_COMFORT_GLOW)
-    private val floorEco = lineShader(C_ECO)
+    private val floorSportPlus = lineShader(C_RED)
 
     // ---- car: photo (with a pre-rendered fading reflection) or a drawn fastback profile ----
     private val photoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -221,9 +223,9 @@ class LuxuryRenderer(private val fonts: Fonts) : GaugeRenderer {
     }
 
     private fun modeColor(m: DriveMode) = when (m) {
-        DriveMode.SPORT -> C_RED
         DriveMode.COMFORT -> C_COMFORT
-        DriveMode.ECO -> C_ECO
+        DriveMode.SPORT -> C_SPORT
+        DriveMode.SPORT_PLUS -> C_RED
     }
 
     private fun drawMode(c: Canvas, f: FrameModel) {
@@ -240,32 +242,33 @@ class LuxuryRenderer(private val fonts: Fonts) : GaugeRenderer {
         }
         c.drawText(sub, LEFT, 186f, subText)
 
-        // Mode track: where the driving sits, Eco to Sport; the active segment is lit.
+        // Mode track: the picked mode is lit; a tap on it (modeHit) steps to the next.
         for (m in DriveMode.entries) {
             val x = LEFT + m.ordinal * (TRACK_SEG + TRACK_GAP)
             val on = m == f.driveMode
             trackPaint.color = if (on) modeColor(m) else C_TRACK
-            trackRect.set(x, TRACK_Y, x + TRACK_SEG, TRACK_Y + 3f)
-            c.drawRoundRect(trackRect, 1.5f, 1.5f, trackPaint)
-            trackText.color = if (on) modeColor(m) else C_DIM
-            c.drawText(m.label, x, TRACK_Y - 8f, trackText)
+            if (on) trackPaint.setShadowLayer(glowRadius(14f), 0f, 0f, modeColor(m)) else trackPaint.clearShadowLayer()
+            trackRect.set(x, TRACK_Y, x + TRACK_SEG, TRACK_Y + 6f)
+            c.drawRoundRect(trackRect, 3f, 3f, trackPaint)
+            trackText.color = if (on) modeColor(m) else C_SOFT
+            c.drawText(m.label, x, TRACK_Y - 11f, trackText)
         }
         c.drawPath(chevronPath, chevron)
     }
 
     private val DriveMode.label: String
         get() = when (this) {
-            DriveMode.ECO -> "Eco"
             DriveMode.COMFORT -> "Comfort"
             DriveMode.SPORT -> "Sport"
+            DriveMode.SPORT_PLUS -> "Sport+"
         }
 
     private fun ordinal(g: Int) = g.toString() + when (g) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }
 
-    /** The highlighted row: coolant when overheating, rpm in SPORT, else economy. */
+    /** The highlighted row: coolant when overheating, rpm in Sport and Sport+, else economy. */
     private fun selectedRow(f: FrameModel) = when {
         Warning.OVERHEAT in f.warnings -> ROW_COOLANT
-        f.driveMode == DriveMode.SPORT -> ROW_RPM
+        f.driveMode != DriveMode.COMFORT -> ROW_RPM
         else -> ROW_ECONOMY
     }
 
@@ -348,9 +351,9 @@ class LuxuryRenderer(private val fonts: Fonts) : GaugeRenderer {
         val glow: Paint
         val line: Shader
         when (f.driveMode) {
-            DriveMode.SPORT -> { glow = glowSport; line = floorSport }
             DriveMode.COMFORT -> { glow = glowComfort; line = floorComfort }
-            DriveMode.ECO -> { glow = glowEco; line = floorEco }
+            DriveMode.SPORT -> { glow = glowSport; line = floorSport }
+            DriveMode.SPORT_PLUS -> { glow = glowSportPlus; line = floorSportPlus }
         }
         glow.alpha = (90 + 165 * rpmN).toInt()
         save = c.save()

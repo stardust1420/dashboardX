@@ -2,10 +2,10 @@ package com.karan.dashboardx.render
 
 import com.karan.dashboardx.alerts.Warning
 import com.karan.dashboardx.alerts.Warnings
-import com.karan.dashboardx.calc.DriveModeEstimator
 import com.karan.dashboardx.calc.GearEstimator
 import com.karan.dashboardx.data.CarState
 import com.karan.dashboardx.data.ConnectionStatus
+import com.karan.dashboardx.data.DriveMode
 import com.karan.dashboardx.data.Pid
 
 /**
@@ -17,7 +17,6 @@ class FrameComposer(private val warnings: Warnings = Warnings()) {
     private val speedS = Smoother()
     private val thrS = Smoother()
     private val gearEstimator = GearEstimator()
-    private val driveModeEstimator = DriveModeEstimator()
     private var hasLast = false
     private var lastMs = 0L
     private var t0Ms = 0L
@@ -27,7 +26,14 @@ class FrameComposer(private val warnings: Warnings = Warnings()) {
     var chime: Set<Warning> = emptySet()
         private set
 
-    fun compose(st: CarState, status: ConnectionStatus, redline: Int, coolantWarn: Int, nowMs: Long): FrameModel {
+    fun compose(
+        st: CarState,
+        status: ConnectionStatus,
+        redline: Int,
+        coolantWarn: Int,
+        nowMs: Long,
+        driveMode: DriveMode = DriveMode.COMFORT,
+    ): FrameModel {
         val dt = if (hasLast) (nowMs - lastMs).coerceIn(0L, MAX_DT_MS) else 0L
         if (!hasLast) t0Ms = nowMs
         hasLast = true
@@ -67,7 +73,7 @@ class FrameComposer(private val warnings: Warnings = Warnings()) {
             noCarData = noCarData,
             // Raw readings: the smoothers lag rpm and speed differently, which would skew the ratio.
             gear = gearEstimator.update(rawRpm, rawSpeed, nowMs),
-            driveMode = driveModeEstimator.update(rawRpm, st.value(Pid.THROTTLE, nowMs), nowMs),
+            driveMode = driveMode,
             wallMs = nowMs,
         )
     }

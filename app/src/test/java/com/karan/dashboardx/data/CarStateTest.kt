@@ -38,11 +38,20 @@ class CarStateTest {
     }
 
     @Test
+    fun driveMode_nextCycles() {
+        assertEquals(DriveMode.SPORT, DriveMode.COMFORT.next())
+        assertEquals(DriveMode.SPORT_PLUS, DriveMode.SPORT.next())
+        assertEquals(DriveMode.COMFORT, DriveMode.SPORT_PLUS.next())
+    }
+
+    @Test
     fun style_nextCycles() {
         assertEquals(Style.HUD, Style.RACING.next())
         assertEquals(Style.ARCADE, Style.HUD.next())
         assertEquals(Style.LUXURY, Style.ARCADE.next())
         assertEquals(Style.CLUSTER, Style.LUXURY.next())
-        assertEquals(Style.RACING, Style.CLUSTER.next())
+        assertEquals(Style.MOST_WANTED, Style.CLUSTER.next())
+        assertEquals(Style.COCKPIT, Style.MOST_WANTED.next())
+        assertEquals(Style.RACING, Style.COCKPIT.next())
     }
 }

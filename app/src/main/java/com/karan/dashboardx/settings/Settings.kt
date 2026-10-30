@@ -1,9 +1,11 @@
 package com.karan.dashboardx.settings
 
 import android.content.SharedPreferences
+import com.karan.dashboardx.data.DriveMode
 import com.karan.dashboardx.data.Style
 
 val DEFAULT_STYLE = Style.RACING
+val DEFAULT_DRIVE_MODE = DriveMode.COMFORT
 const val DEFAULT_ADAPTER_IS_BLE = false
 const val DEFAULT_DEMO_MODE = false
 const val DEFAULT_SOUND_VOLUME = 0.7f
@@ -16,6 +18,10 @@ class Settings(private val prefs: SharedPreferences) {
     var style: Style
         get() = prefs.getString(K_STYLE, null)?.let { n -> Style.entries.firstOrNull { it.name == n } } ?: DEFAULT_STYLE
         set(v) { prefs.edit().putString(K_STYLE, v.name).apply() }
+
+    var driveMode: DriveMode
+        get() = prefs.getString(K_MODE, null)?.let { n -> DriveMode.entries.firstOrNull { it.name == n } } ?: DEFAULT_DRIVE_MODE
+        set(v) { prefs.edit().putString(K_MODE, v.name).apply() }
 
     var adapterAddress: String?
         get() = prefs.getString(K_ADDR, null)
@@ -56,6 +62,7 @@ class Settings(private val prefs: SharedPreferences) {
 
     private companion object {
         const val K_STYLE = "style"
+        const val K_MODE = "driveMode"
         const val K_ADDR = "adapterAddress"
         const val K_ADDR_NAME = "adapterName"
         const val K_BLE = "adapterIsBle"

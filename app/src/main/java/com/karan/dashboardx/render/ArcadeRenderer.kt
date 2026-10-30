@@ -65,6 +65,10 @@ class ArcadeRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val speedText = text(11f, Paint.Align.RIGHT, C_CYAN)
     private val gearText = text(11f, Paint.Align.LEFT, C_YELLOW)
 
+    private val modeSel = ModeSelector(240f, 422f, 560f, 466f, text(12f, Paint.Align.CENTER, C_WHITE),
+        intArrayOf(C_CYAN, C_YELLOW, C_PINK), 0xFF9A78CC.toInt(), C_NIGHT, 0f, litText = C_NIGHT)
+    override val modeHit: RectF get() = modeSel.hit
+
     // Canvas textBaseline='top' emulation (em-box top ~ ascent line).
     private fun topOffset(p: Paint): Float = -p.fontMetrics.ascent
     private val topRpm = topOffset(rpmText)
@@ -109,6 +113,7 @@ class ArcadeRenderer(private val fonts: Fonts) : GaugeRenderer {
         drawPowerBar(c, f)
         drawRpm(c, f)
         drawStats(c, f)
+        modeSel.draw(c, f.driveMode)
         drawStatusOverlay(c, f, fonts)
     }
 

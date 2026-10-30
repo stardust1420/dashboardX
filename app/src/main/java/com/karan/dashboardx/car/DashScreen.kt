@@ -16,8 +16,8 @@ import com.karan.dashboardx.audio.EngineSoundController
 
 /**
  * The car dashboard: a [NavigationTemplate] whose map area is our full-screen [SurfaceRenderer],
- * with a single Sound (on/off) action. A tap anywhere on the dash cycles and persists the style,
- * like on the phone.
+ * with a single Sound (on/off) action. A tap on the drive-mode selector steps the mode; a tap
+ * anywhere else on the dash cycles and persists the style, like on the phone.
  * Holds the [DashRuntime] from create to destroy.
  *
  * Audio: owns one [EngineSoundController] (create to destroy), fed every drawn frame through

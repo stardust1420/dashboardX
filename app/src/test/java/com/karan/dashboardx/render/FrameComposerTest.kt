@@ -3,6 +3,7 @@ package com.karan.dashboardx.render
 import com.karan.dashboardx.alerts.Warning
 import com.karan.dashboardx.data.CarState
 import com.karan.dashboardx.data.ConnectionStatus
+import com.karan.dashboardx.data.DriveMode
 import com.karan.dashboardx.data.Pid
 import com.karan.dashboardx.data.Reading
 import org.junit.Assert.assertEquals
@@ -80,6 +81,14 @@ class FrameComposerTest {
         assertEquals(6200, f.redline)
         assertEquals(0.0, f.tSec, 1e-9)
         assertEquals(1.5, c.at(st, 1500).tSec, 1e-9)
+    }
+
+    @Test
+    fun composer_passesThroughPickedDriveMode() {
+        val c = FrameComposer()
+        assertEquals(DriveMode.COMFORT, c.at(CarState(), 0).driveMode)
+        assertEquals(DriveMode.SPORT_PLUS,
+            c.compose(CarState(), ConnectionStatus.CONNECTED, 6200, 105, 16, DriveMode.SPORT_PLUS).driveMode)
     }
 
     @Test

@@ -95,6 +95,10 @@ class RacingRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val value = text(800, 34f, Paint.Align.LEFT, C_WHITE)
     private val small = text(500, 14f, Paint.Align.LEFT, C_LABEL)
 
+    private val modeSel = ModeSelector(18f, 424f, 308f, 466f, text(800, 13f, Paint.Align.CENTER, C_LABEL),
+        intArrayOf(C_CYAN, C_YELLOW, C_RED), C_SOFT, C_TRACK, 10f)
+    override val modeHit: RectF get() = modeSel.hit
+
     // Canvas textBaseline='middle' emulation: per-paint offset, computed once.
     private val midTick = middleOffset(tickLabel)
     private val midRpm = middleOffset(rpmText)
@@ -134,6 +138,7 @@ class RacingRenderer(private val fonts: Fonts) : GaugeRenderer {
         drawShiftLights(c, f)
         drawTach(c, f)
         drawBars(c, f)
+        modeSel.draw(c, f.driveMode)
         drawStatusOverlay(c, f, fonts)
     }
 

@@ -3,6 +3,7 @@ package com.karan.dashboardx.render
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import com.karan.dashboardx.alerts.Warning
 import kotlin.math.PI
 import kotlin.math.cos
@@ -45,6 +46,10 @@ class HudRenderer(private val fonts: Fonts) : GaugeRenderer {
         }
 
     private val bgPaint = Paint().apply { color = C_BG }
+
+    private val modeSel = ModeSelector(250f, 28f, 550f, 70f, text(17f, Paint.Align.CENTER, C_GREEN),
+        intArrayOf(C_GREEN, C_GREEN, C_RED), 0xFF2FB86A.toInt(), C_BG, 0f, litText = C_BG)
+    override val modeHit: RectF get() = modeSel.hit
     private val boxFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = C_BG }
     private val line = stroke(C_GREEN, 2f)
     private val lineRed = stroke(C_RED, 2f)
@@ -113,6 +118,7 @@ class HudRenderer(private val fonts: Fonts) : GaugeRenderer {
         drawGear(c, f)
         drawReticle(c, f)
         drawReadouts(c, f)
+        modeSel.draw(c, f.driveMode)
         drawStatusOverlay(c, f, fonts)
     }
 

@@ -38,8 +38,15 @@ data class CarState(
     fun isUnsupported(pid: Pid): Boolean = pid in unsupported
 }
 
+/** The drive mode the driver picked by tapping the on-screen selector (display only; saved). */
+enum class DriveMode {
+    COMFORT, SPORT, SPORT_PLUS;
+
+    fun next(): DriveMode = entries[(ordinal + 1) % entries.size]
+}
+
 enum class Style {
-    RACING, HUD, ARCADE, LUXURY, CLUSTER;
+    RACING, HUD, ARCADE, LUXURY, CLUSTER, MOST_WANTED, COCKPIT;
 
     fun next(): Style = entries[(ordinal + 1) % entries.size]
 }

@@ -4,6 +4,7 @@ import android.graphics.Color
 import android.graphics.Rect
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.view.Surface
 import androidx.car.app.CarContext
 import androidx.car.app.SurfaceCallback
@@ -22,7 +23,8 @@ import java.util.EnumMap
 /**
  * Draws the current [style] into the host's Surface at ~30 fps on a dedicated render thread,
  * fitted to the whole surface: full screen, with the host's Sound button floating on top.
- * A tap anywhere on the surface calls [onTap] (hosts with Car API level 5+).
+ * A tap on the style's drive-mode selector steps the drive mode; a tap anywhere else calls [onTap]
+ * (hosts with Car API level 5+).
  *
  * Threading: surface and lifecycle callbacks arrive on the main thread; frames are drawn on
  * [thread]. All loop start/stop decisions run on the render thread, so there is never more than
@@ -35,7 +37,7 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
     /** Called on the render thread with each frame's model, before it is drawn (the engine sound feed). */
     @Volatile var onFrame: ((FrameModel) -> Unit)? = null
 
-    /** Called on the main thread when the user taps the surface (the style switch). */
+    /** Called on the main thread when the user taps the surface off the mode selector (the style switch). */
     var onTap: (() -> Unit)? = null
 
     private val fonts = Fonts(carContext)
@@ -43,6 +45,7 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
 
     private val thread = HandlerThread("DashCarRender").apply { start() }
     private val handler = Handler(thread.looper)
+    private val main = Handler(Looper.getMainLooper())
 
     private val lock = Any()
     private var surface: Surface? = null // guarded by lock
@@ -87,7 +90,17 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
     }
 
     override fun onClick(x: Float, y: Float) {
-        onTap?.invoke()
+        val vp = viewport
+        val lx = vp.toLogicalX(x)
+        val ly = vp.toLogicalY(y)
+        // The renderers belong to the render thread, so the hit test runs there.
+        handler.post {
+            if (renderers[style]?.modeHit?.contains(lx, ly) == true) {
+                DashRuntime.cycleDriveMode()
+            } else {
+                main.post { onTap?.invoke() }
+            }
+        }
     }
 
     override fun onSurfaceDestroyed(surfaceContainer: SurfaceContainer) {

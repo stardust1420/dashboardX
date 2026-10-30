@@ -9,6 +9,7 @@ import com.karan.dashboardx.data.CarState
 import com.karan.dashboardx.data.ConnectionStatus
 import com.karan.dashboardx.data.DataSource
 import com.karan.dashboardx.data.DemoSource
+import com.karan.dashboardx.data.DriveMode
 import com.karan.dashboardx.obd.DiagLog
 import com.karan.dashboardx.obd.ObdSource
 import com.karan.dashboardx.obd.Transports
@@ -71,6 +72,10 @@ object DashRuntime {
 
     @Volatile private var redline = DEFAULT_REDLINE_RPM
     @Volatile private var coolantWarn = DEFAULT_COOLANT_WARN_C
+
+    /** The picked drive mode, shown on every style. */
+    @Volatile var driveMode = DriveMode.COMFORT
+        private set
     private val composer = FrameComposer() // guarded by itself
 
     /** Creates [settings] without starting anything. Safe to call repeatedly. */
@@ -121,12 +126,19 @@ object DashRuntime {
         }
     }
 
+    /** Steps the drive mode (Comfort, Sport, Sport+) and saves it. Any thread, after [init]. */
+    fun cycleDriveMode() {
+        val next = driveMode.next()
+        driveMode = next
+        settings.driveMode = next
+    }
+
     /** Builds the next frame; advances the smoothers by the time since the previous call. */
     fun frame(nowMs: Long): FrameModel {
         val f: FrameModel
         val chime: Set<Warning>
         synchronized(composer) {
-            f = composer.compose(_state.value, _status.value, redline, coolantWarn, nowMs)
+            f = composer.compose(_state.value, _status.value, redline, coolantWarn, nowMs, driveMode)
             chime = composer.chime
         }
         if (chime.isNotEmpty()) {
@@ -140,6 +152,7 @@ object DashRuntime {
         val s = settings
         redline = s.redlineRpm
         coolantWarn = s.coolantWarnC
+        driveMode = s.driveMode
     }
 
     private fun startSource() {

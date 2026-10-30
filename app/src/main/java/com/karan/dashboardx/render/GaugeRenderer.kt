@@ -20,6 +20,9 @@ const val TACH_MAX_RPM = 7000.0
  */
 interface GaugeRenderer {
     fun draw(c: Canvas, f: FrameModel)
+
+    /** Logical tap target of this style's drive-mode selector; a tap elsewhere changes the style. */
+    val modeHit: RectF
 }
 
 fun rendererFor(style: Style, fonts: Fonts): GaugeRenderer = when (style) {
@@ -28,6 +31,8 @@ fun rendererFor(style: Style, fonts: Fonts): GaugeRenderer = when (style) {
     Style.ARCADE -> ArcadeRenderer(fonts)
     Style.LUXURY -> LuxuryRenderer(fonts)
     Style.CLUSTER -> ClusterRenderer(fonts)
+    Style.MOST_WANTED -> MostWantedRenderer(fonts)
+    Style.COCKPIT -> CockpitRenderer(fonts)
 }
 
 /** Canvas `shadowBlur` (≈ 2σ) to Android shadow-layer radius (σ = 0.57735·r + 0.5). */
