@@ -1,0 +1,36 @@
+package com.karan.dashboardx.render
+
+import com.karan.dashboardx.alerts.Warning
+import com.karan.dashboardx.data.ConnectionStatus
+import com.karan.dashboardx.data.DriveMode
+
+/**
+ * Everything a renderer needs for one frame. RPM, speed and throttle are smoothed; the other
+ * values are raw and already stale-checked (null = missing or older than the PID's
+ * [com.karan.dashboardx.data.Pid.staleMs]: 3 s, or 10 s for coolant, IAT and oil).
+ */
+data class FrameModel(
+    val rpm: Double?,
+    val speed: Double?,
+    val throttle: Double?,
+    val coolant: Double?,
+    val oil: Double?,
+    val iat: Double?,
+    val instantKml: Double?,
+    val tripKml: Double?,
+    val oilUnsupported: Boolean,
+    val status: ConnectionStatus,
+    val warnings: Set<Warning>,
+    val redline: Int,
+    val tSec: Double,
+    /** CONNECTED but no fresh rpm for more than 3 s: the overlay hints that the engine may be off. */
+    val noCarData: Boolean = false,
+    /** Estimated automatic-gearbox gear (1..6), or null when it cannot be told (slow, mid-shift). */
+    val gear: Int? = null,
+    /** Picked by the driver on the mode selector ([com.karan.dashboardx.DashRuntime.cycleDriveMode]). */
+    val driveMode: DriveMode = DriveMode.COMFORT,
+    /** Wall-clock time of the frame (for a clock display). */
+    val wallMs: Long = 0L,
+    /** Engine sound on: drawn by each style's [SoundButton]. */
+    val soundOn: Boolean = false,
+)
