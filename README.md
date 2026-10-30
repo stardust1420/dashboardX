@@ -46,13 +46,21 @@ Android Auto 17.7 and newer hides sideloaded Car App Library apps such as Dashbo
 
 ### Install with KingInstaller
 1. Copy the APK to the phone: `adb push app/build/outputs/apk/debug/app-debug.apk /sdcard/Download/DashboardX.apk`
-2. Uninstall DashboardX if it is already installed (`adb uninstall com.karan.dashboardx`). An update keeps the old installer record. This clears the app's settings, so pick the adapter again afterwards.
+2. Uninstall DashboardX if it is already installed (`adb uninstall com.karan.dashboardx`). Installing over a copy put there by plain adb keeps its `pc` installer record. Uninstalling clears the app's settings, so pick the adapter again afterwards.
 3. In KingInstaller, turn **Oppo/Realme/OnePlus** ON (leave Root and Shizuku off). With all switches off, the installer is recorded as KingInstaller, which does not work.
 4. Tap **Select APK to install**, choose `Download/DashboardX.apk`, then **Install as king**. If asked, choose the default **Package installer**.
 5. Check: `adb shell pm list packages -i com.karan.dashboardx` must end with `installer=com.android.vending`.
 6. Force-stop Android Auto. DashboardX now shows in Android Auto settings, **Customize launcher**.
 
-Repeat this for every new build.
+### After a code change
+1. Run the tests and build: `bash tools/jvmcheck.sh`, then `tools/gradle.sh :app:assembleDebug`.
+2. Copy the new APK to the phone (step 1 above).
+3. Install it with KingInstaller (steps 3 to 6 above). Try this without uninstalling first, which may keep your settings (untested). If the step 5 check shows any installer other than `com.android.vending`, uninstall and install again.
+4. If you uninstalled, pick the adapter again in Settings.
+
+Don't use `installDebug` or a plain `adb install` for a build you want in the car. The app still runs on the phone, but Android Auto drops it again.
+
+Builds are signed with `~/.android/debug.keystore` on this Mac. Back it up. A different keystore (another Mac, or a lost file) means you have to uninstall before every install.
 
 DashboardX appears in the car as a **navigation app**. That is on purpose: Android Auto only lets navigation apps draw a full custom screen, which the dashboard needs.
 
