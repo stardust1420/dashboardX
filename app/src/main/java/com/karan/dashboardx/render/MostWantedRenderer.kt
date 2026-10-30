@@ -8,9 +8,11 @@ import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RadialGradient
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import com.karan.dashboardx.alerts.Warning
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.sin
@@ -19,10 +21,13 @@ import kotlin.math.sin
  * Style F, "Most Wanted": the game's cover art ([Fonts.mostWantedArt]) fills the left third and
  * fades into a teal-to-asphalt panel holding a street-racing round tach: an amber needle on the
  * outer ring only (so it never crosses the big gear in the middle), lit rpm arc, digital speed below. Throttle and coolant sit in two segmented bars left
- * of the tach, oil / air / km/l along the top left of the panel, the drive-mode selector over the foot of the art. Without the art the panel simply runs full width.
+ * of the tach, oil / air / km/l along the top left of the panel, the drive-mode selector over the foot of the art,
+ * the Sound toggle in the bottom-right corner. The art takes [ART_SHARE] of the screen width, edge included (cropping
+ * sky and road to fit, not the title), and the panel is scaled to fit the rest ([panelLeft], [panelScale]); without
+ * the art the backdrop is plain panel. On a wide screen the Sound toggle slides into the right corner.
  *
  * Everything static (art, fade, panel, tach face, ticks, numerals, redline arc) is baked into one
- * bitmap, rebuilt only when the redline changes.
+ * bitmap, rebuilt only when the redline or the screen width changes.
  */
 class MostWantedRenderer(private val fonts: Fonts) : GaugeRenderer {
 
@@ -40,8 +45,12 @@ class MostWantedRenderer(private val fonts: Fonts) : GaugeRenderer {
         const val C_RED = 0xFFFF2E1F.toInt()
         const val C_NOS = 0xFF3CC8FF.toInt()
 
-        const val ART_W = 320f // 600×900 cover scaled to the full 480 height
-        const val FADE_FROM = 236f
+        const val ART_SHARE = 0.5f // of the whole screen width
+        const val ART_W = 320f // panel layout: the art's edge in the 800-wide design, the panel to its right
+        const val FADE_SHARE = 0.35f // the art's right part that fades into the panel
+
+        val FADE_ALPHA = intArrayOf(0xFF000000.toInt(), 0xD8000000.toInt(), 0x80000000.toInt(), 0x28000000, 0)
+        val FADE_POS = floatArrayOf(0f, 0.25f, 0.5f, 0.75f, 1f)
 
         const val CX = 596f
         const val CY = 262f
@@ -73,6 +82,7 @@ class MostWantedRenderer(private val fonts: Fonts) : GaugeRenderer {
     // ---- baked backdrop ----
     private var backdrop: Bitmap? = null
     private var bakedRedline = Int.MIN_VALUE
+    private var bakedExt = -1 // whole logical px: the bitmap is 800 + 2·bakedExt wide
     private val tachRect = RectF(CX - R, CY - R, CX + R, CY + R)
     private val progressRect = RectF(tachRect).apply { inset(PROGRESS_INSET, PROGRESS_INSET) }
 
@@ -107,6 +117,8 @@ class MostWantedRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val modeSel = ModeSelector(20f, 420f, 304f, 464f, text(15f, C_TEXT, Paint.Align.CENTER, 900),
         intArrayOf(C_STEEL, C_AMBER, C_RED), C_SOFT, 0xD90A0C0C.toInt(), 5f)
     override val modeHit: RectF get() = modeSel.hit
+    private val soundBtn = SoundButton(744f, 420f, 788f, 464f, C_AMBER, C_SOFT, 0xD90A0C0C.toInt(), 5f)
+    override val soundHit: RectF get() = soundBtn.hit
 
     private val gearMid = middleOffset(gearText)
     private val speedMid = middleOffset(speedText)
@@ -118,18 +130,43 @@ class MostWantedRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val tAir = TextCache()
     private val tKml = TextCache()
 
-    override fun draw(c: Canvas, f: FrameModel) {
-        if (backdrop == null || bakedRedline != f.redline) {
+    override fun draw(c: Canvas, f: FrameModel, ext: Float) {
+        // Whole px, so the baked face and the live needle slide by exactly the same amount.
+        val e = ceil(ext).toInt()
+        if (backdrop == null || bakedRedline != f.redline || bakedExt != e) {
             backdrop?.recycle()
-            backdrop = bake(f.redline)
+            backdrop = bake(f.redline, e)
             bakedRedline = f.redline
+            bakedExt = e
         }
-        c.drawBitmap(backdrop!!, 0f, 0f, null)
+        val dx = e.toFloat()
+        c.drawBitmap(backdrop!!, -dx, 0f, null)
+        val save = c.save()
+        c.toPanel(panelLeft(e) - dx, panelScale(e))
         drawTach(c, f)
         drawBars(c, f)
         drawTopStats(c, f)
-        modeSel.draw(c, f.driveMode)
-        drawStatusOverlay(c, f, fonts)
+        c.restoreToCount(save)
+        modeSel.draw(c, f.driveMode, -dx)
+        soundBtn.draw(c, f.soundOn, dx)
+        drawStatusOverlay(c, f, fonts, ext)
+    }
+
+    /** Width of the art, from the left edge of a screen [ext] px wider on each side. */
+    private fun artWidth(ext: Int): Float = ART_SHARE * (Viewport.LOGICAL_W + 2 * ext)
+
+    /** Left edge of the panel in backdrop px (the backdrop starts [ext] px left of the 800-wide core). */
+    private fun panelLeft(ext: Int): Float = artWidth(ext)
+
+    /** The panel's 480-px-wide design (x [ART_W]..800) shrunk to the width the art leaves. */
+    private fun panelScale(ext: Int): Float =
+        ((Viewport.LOGICAL_W + 2 * ext - artWidth(ext)) / (Viewport.LOGICAL_W - ART_W)).coerceAtMost(1f)
+
+    /** Maps the panel design onto the canvas: its left edge at [left], scaled by [k] about the middle row. */
+    private fun Canvas.toPanel(left: Float, k: Float) {
+        translate(left, Viewport.LOGICAL_H / 2f)
+        scale(k, k)
+        translate(-ART_W, -Viewport.LOGICAL_H / 2f)
     }
 
     private fun angleFor(rpm: Double): Float =
@@ -200,27 +237,43 @@ class MostWantedRenderer(private val fonts: Fonts) : GaugeRenderer {
 
     // ---- one-off bake ----
 
-    private fun bake(redline: Int): Bitmap {
-        val bmp = Bitmap.createBitmap(Viewport.LOGICAL_W.toInt(), Viewport.LOGICAL_H.toInt(), Bitmap.Config.ARGB_8888)
+    /** The backdrop [ext] px wider on each side: the art from its left edge, then the scaled panel face. */
+    private fun bake(redline: Int, ext: Int): Bitmap {
+        val w = Viewport.LOGICAL_W.toInt() + 2 * ext
+        val bmp = Bitmap.createBitmap(w, Viewport.LOGICAL_H.toInt(), Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
-        c.drawRect(0f, 0f, 800f, 480f, Paint().apply {
+        c.drawRect(0f, 0f, w.toFloat(), 480f, Paint().apply {
             shader = LinearGradient(0f, 0f, 0f, 480f, C_PANEL_TOP, C_PANEL_BOTTOM, Shader.TileMode.CLAMP)
         })
+        val left = panelLeft(ext)
+        val k = panelScale(ext)
         // Warm sodium-light haze behind the tach, like the cover's sky.
-        c.drawRect(0f, 0f, 800f, 480f, Paint().apply {
-            shader = RadialGradient(CX, CY - 40f, 300f, 0x40FF9A1F, 0x00FF9A1F, Shader.TileMode.CLAMP)
+        val hazeX = left + (CX - ART_W) * k
+        val hazeY = 240f + (CY - 40f - 240f) * k
+        c.drawRect(0f, 0f, w.toFloat(), 480f, Paint().apply {
+            shader = RadialGradient(hazeX, hazeY, 300f * k, 0x40FF9A1F, 0x00FF9A1F, Shader.TileMode.CLAMP)
         })
-        fonts.mostWantedArt?.let { art -> drawArt(c, art) }
+        fonts.mostWantedArt?.let { art -> drawArt(c, art, artWidth(ext)) }
+        c.toPanel(left, k)
         drawFace(c, redline)
         return bmp
     }
 
-    /** The cover, scaled to the left [ART_W] px, its right edge faded into the panel. */
-    private fun drawArt(c: Canvas, art: Bitmap) {
-        val layer = c.saveLayer(0f, 0f, ART_W, 480f, null)
-        c.drawBitmap(art, null, RectF(0f, 0f, ART_W, 480f), Paint(Paint.FILTER_BITMAP_FLAG))
-        c.drawRect(FADE_FROM, 0f, ART_W, 480f, Paint().apply {
-            shader = LinearGradient(FADE_FROM, 0f, ART_W, 0f, 0xFF000000.toInt(), 0x00000000, Shader.TileMode.CLAMP)
+    /**
+     * The cover, scaled to the left [w] px, its right edge faded into the panel. Wider than the cover's
+     * own 2:3 it crops rows, mostly road from the bottom (under the mode selector), keeping the title.
+     */
+    private fun drawArt(c: Canvas, art: Bitmap, w: Float) {
+        val rows = (art.width * 480f / w).toInt().coerceAtMost(art.height)
+        val top = ((art.height - rows) * 0.18f).toInt()
+        val src = Rect(0, top, art.width, top + rows)
+        val fade = w * (1f - FADE_SHARE)
+        val layer = c.saveLayer(0f, 0f, w, 480f, null)
+        c.drawBitmap(art, src, RectF(0f, 0f, w, 480f), Paint(Paint.FILTER_BITMAP_FLAG))
+        // Past w: w is fractional, and a part-covered last column would keep its art (a thin line).
+        c.drawRect(fade, 0f, ceil(w) + 1f, 480f, Paint().apply {
+            // Smoothstep, not linear, so bright highlights are gone before the edge instead of ending in a line.
+            shader = LinearGradient(fade, 0f, w, 0f, FADE_ALPHA, FADE_POS, Shader.TileMode.CLAMP)
             xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
         })
         c.restoreToCount(layer)

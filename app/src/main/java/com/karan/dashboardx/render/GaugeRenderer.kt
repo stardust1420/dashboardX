@@ -14,15 +14,28 @@ const val TACH_MAX_RPM = 7000.0
 
 /**
  * One visual style. [draw] paints a complete frame in the 800×480 logical space (the caller
- * applies the [Viewport] transform), finishing with [drawStatusOverlay]. Implementations
- * allocate their Paints/Paths/RectFs once and must not allocate per frame beyond formatted text.
+ * applies the [Viewport] transform), finishing with [drawStatusOverlay]. On a wide screen [ext]
+ * ([Viewport.ext]) logical px more show on each side: the backdrop covers them and the side
+ * columns slide out by up to [ext] (see [shifted]). Implementations allocate their
+ * Paints/Paths/RectFs once and must not allocate per frame beyond formatted text.
  * One instance is used from one thread.
  */
 interface GaugeRenderer {
-    fun draw(c: Canvas, f: FrameModel)
+    fun draw(c: Canvas, f: FrameModel, ext: Float = 0f)
 
-    /** Logical tap target of this style's drive-mode selector; a tap elsewhere changes the style. */
+    /** Logical tap target of this style's drive-mode selector, as last drawn; a tap elsewhere changes the style. */
     val modeHit: RectF
+
+    /** Logical tap target of this style's engine-sound toggle, as last drawn. */
+    val soundHit: RectF
+}
+
+/** Runs [block] with the canvas moved [dx] sideways (a side column sliding out into [Viewport.ext]). */
+inline fun Canvas.shifted(dx: Float, block: () -> Unit) {
+    val save = save()
+    translate(dx, 0f)
+    block()
+    restoreToCount(save)
 }
 
 fun rendererFor(style: Style, fonts: Fonts): GaugeRenderer = when (style) {
@@ -96,8 +109,9 @@ private class StatusOverlay {
     private var fonts: Fonts? = null
     private var textMid = 0f
     private var smallMid = 0f
+    private var demoHalf = 0f
 
-    fun draw(c: Canvas, f: FrameModel, fonts: Fonts) {
+    fun draw(c: Canvas, f: FrameModel, fonts: Fonts, ext: Float) {
         if (this.fonts !== fonts) {
             this.fonts = fonts
             fonts.orbitron(text, 500)
@@ -105,8 +119,7 @@ private class StatusOverlay {
             fonts.orbitron(small, 500)
             smallMid = middleOffset(small)
             // Fixed strings: measure once here, not per frame.
-            val dw = small.measureText(DEMO) / 2f + 10f
-            demoRect.set(14f, 12f, 14f + dw * 2f, 38f)
+            demoHalf = small.measureText(DEMO) / 2f + 10f
             val hw = small.measureText(NO_DATA) / 2f + 16f
             hintRect.set(400f - hw, 430f, 400f + hw, 462f)
         }
@@ -117,7 +130,7 @@ private class StatusOverlay {
             ConnectionStatus.DEMO, ConnectionStatus.CONNECTED -> null
         }
         if (msg != null) {
-            c.drawRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H, dim)
+            c.drawRect(-ext, 0f, Viewport.LOGICAL_W + ext, Viewport.LOGICAL_H, dim)
             val half = text.measureText(msg) / 2f + 28f
             rect.set(400f - half, 240f - 34f, 400f + half, 240f + 34f)
             c.drawRoundRect(rect, 14f, 14f, pill)
@@ -125,6 +138,7 @@ private class StatusOverlay {
             c.drawText(msg, 400f, 240f + textMid, text)
         }
         if (f.status == ConnectionStatus.DEMO) {
+            demoRect.set(14f - ext, 12f, 14f - ext + demoHalf * 2f, 38f)
             c.drawRoundRect(demoRect, 6f, 6f, tagFill)
             c.drawRoundRect(demoRect, 6f, 6f, tagEdge)
             c.drawText(DEMO, demoRect.centerX(), demoRect.centerY() + smallMid, small)
@@ -137,7 +151,7 @@ private class StatusOverlay {
         // Red edge flash at 3 Hz (on for the first half of each 1/3 s period).
         if (Warning.OVERHEAT in f.warnings && floor(f.tSec * 6.0).toLong() % 2L == 0L) {
             val h = edge.strokeWidth / 2f
-            c.drawRect(h, h, Viewport.LOGICAL_W - h, Viewport.LOGICAL_H - h, edge)
+            c.drawRect(h - ext, h, Viewport.LOGICAL_W + ext - h, Viewport.LOGICAL_H - h, edge)
         }
     }
 }
@@ -151,8 +165,8 @@ private val overlays = ThreadLocal.withInitial { StatusOverlay() }
 /**
  * Shared status layer: dims and labels CONNECTING/RECONNECTING/NEEDS_SETUP; a small DEMO tag
  * (top-left) in demo mode; a "No data from car" hint when [FrameModel.noCarData]; flashes the
- * edge on OVERHEAT. Allocation-free per frame.
+ * edge on OVERHEAT. Covers the [ext] margins too. Allocation-free per frame.
  */
-fun drawStatusOverlay(c: Canvas, f: FrameModel, fonts: Fonts) {
-    overlays.get()!!.draw(c, f, fonts)
+fun drawStatusOverlay(c: Canvas, f: FrameModel, fonts: Fonts, ext: Float) {
+    overlays.get()!!.draw(c, f, fonts, ext)
 }

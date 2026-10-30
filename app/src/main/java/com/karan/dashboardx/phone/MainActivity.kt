@@ -13,12 +13,9 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.FrameLayout
-import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.TextView
 import com.karan.dashboardx.DashRuntime
 import com.karan.dashboardx.audio.EngineSoundController
-import com.karan.dashboardx.car.CarIcons
 import com.karan.dashboardx.data.ConnectionStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -27,9 +24,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Phone screen: the live dashboard, landscape and immersive, with a Sound button and a gear button
- * (top right) that opens [SettingsActivity]. A tap anywhere else cycles the style (handled by
- * [DashView]). While the dashboard needs setup, the gear also reads "Set up" so first launch is obvious.
+ * Phone screen: the live dashboard, landscape and immersive, with a gear button (top right) that
+ * opens [SettingsActivity]. The style's own Sound toggle switches the engine sound; a tap anywhere
+ * else cycles the style (both handled by [DashView]). While the dashboard needs setup, the gear also
+ * reads "Set up" so first launch is obvious.
  *
  * Audio: owns one [EngineSoundController] (create to destroy), fed every drawn frame through
  * [DashView.onFrame]. As on the car screen, the engine sound is off at every start and is switched
@@ -37,7 +35,7 @@ import kotlinx.coroutines.launch
  */
 class MainActivity : Activity() {
     private lateinit var gear: TextView
-    private lateinit var soundButton: ImageView
+    private lateinit var dash: DashView
     private var sound: EngineSoundController? = null // main thread
     private val scope: CoroutineScope = MainScope()
     private var statusJob: Job? = null
@@ -46,25 +44,22 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         DashRuntime.init(this)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Draw under the camera cutout too, so the dash runs edge to edge.
+        window.attributes = window.attributes.apply {
+            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
         val root = FrameLayout(this)
-        val dash = DashView(this)
+        dash = DashView(this)
         root.addView(dash, FrameLayout.LayoutParams(-1, -1))
         val controller = EngineSoundController(this)
         sound = controller
-        // The audio thread switched itself off (posted on the main thread): show the icon as off.
-        controller.onStateChanged = { if (sound === controller) refreshSoundIcon() }
+        // The audio thread switched itself off (posted on the main thread): show the toggle as off.
+        controller.onStateChanged = { if (sound === controller) dash.soundOn = controller.enabled }
         dash.onFrame = { f -> controller.update(f.rpm, f.throttle) }
-        soundButton = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(dp(14), dp(14), dp(14), dp(14))
-            background = buttonBackground()
-            isClickable = true
-            setOnClickListener {
-                sound?.let { it.enabled = !it.enabled }
-                refreshSoundIcon()
-            }
+        dash.onSoundTap = {
+            controller.enabled = !controller.enabled
+            dash.soundOn = controller.enabled
         }
-        refreshSoundIcon()
         gear = TextView(this).apply {
             text = GEAR
             setTextColor(Color.WHITE)
@@ -78,12 +73,7 @@ class MainActivity : Activity() {
             isClickable = true
             setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
         }
-        val buttons = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            addView(soundButton, LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginEnd = dp(12) })
-            addView(gear, LinearLayout.LayoutParams(-2, -2))
-        }
-        root.addView(buttons, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
+        root.addView(gear, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
             topMargin = dp(16); marginEnd = dp(16)
         })
         setContentView(root)
@@ -100,12 +90,8 @@ class MainActivity : Activity() {
     }
 
     override fun onStop() {
-        sound?.let {
-            if (it.enabled) {
-                it.enabled = false
-                refreshSoundIcon()
-            }
-        }
+        sound?.enabled = false
+        dash.soundOn = false
         statusJob?.cancel()
         statusJob = null
         DashRuntime.release()
@@ -116,14 +102,9 @@ class MainActivity : Activity() {
         sound?.onStateChanged = null
         sound?.release()
         sound = null
+        dash.onSoundTap = null
         scope.cancel()
         super.onDestroy()
-    }
-
-    private fun refreshSoundIcon() {
-        val on = sound?.enabled == true
-        soundButton.setImageBitmap(if (on) CarIcons.soundOnBitmap else CarIcons.soundOffBitmap)
-        soundButton.contentDescription = if (on) "Engine sound on" else "Engine sound off"
     }
 
     private fun buttonBackground() = GradientDrawable().apply {

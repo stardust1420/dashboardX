@@ -68,6 +68,8 @@ class ArcadeRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val modeSel = ModeSelector(240f, 422f, 560f, 466f, text(12f, Paint.Align.CENTER, C_WHITE),
         intArrayOf(C_CYAN, C_YELLOW, C_PINK), 0xFF9A78CC.toInt(), C_NIGHT, 0f, litText = C_NIGHT)
     override val modeHit: RectF get() = modeSel.hit
+    private val soundBtn = SoundButton(712f, 422f, 768f, 466f, C_CYAN, 0xFF9A78CC.toInt(), C_NIGHT, 0f)
+    override val soundHit: RectF get() = soundBtn.hit
 
     // Canvas textBaseline='top' emulation (em-box top ~ ascent line).
     private fun topOffset(p: Paint): Float = -p.fontMetrics.ascent
@@ -106,15 +108,17 @@ class ArcadeRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val tSpeed = TextCache()
     private val tGear = TextCache()
 
-    override fun draw(c: Canvas, f: FrameModel) {
+    override fun draw(c: Canvas, f: FrameModel, ext: Float) {
         advanceGrid(f)
-        drawScene(c)
-        drawGrid(c)
+        drawScene(c, ext)
+        drawGrid(c, ext)
         drawPowerBar(c, f)
         drawRpm(c, f)
-        drawStats(c, f)
+        c.shifted(-ext) { drawLeftStats(c, f) }
+        c.shifted(ext) { drawRightStats(c, f) }
         modeSel.draw(c, f.driveMode)
-        drawStatusOverlay(c, f, fonts)
+        soundBtn.draw(c, f.soundOn, ext)
+        drawStatusOverlay(c, f, fonts, ext)
     }
 
     private fun advanceGrid(f: FrameModel) {
@@ -128,9 +132,9 @@ class ArcadeRenderer(private val fonts: Fonts) : GaugeRenderer {
         gridOff = (gridOff + speed * GRID_CYCLES_PER_KMH_S * dt) % 1.0
     }
 
-    private fun drawScene(c: Canvas) {
-        c.drawRect(0f, 0f, 800f, 300f, skyPaint)
-        c.drawRect(0f, 300f, 800f, 480f, bg)
+    private fun drawScene(c: Canvas, ext: Float) {
+        c.drawRect(-ext, 0f, 800f + ext, 300f, skyPaint)
+        c.drawRect(-ext, 300f, 800f + ext, 480f, bg)
         val save = c.save()
         c.clipPath(sunPath)
         c.drawRect(290f, 190f, 510f, 300f, sunPaint)
@@ -138,12 +142,12 @@ class ArcadeRenderer(private val fonts: Fonts) : GaugeRenderer {
         c.restoreToCount(save)
     }
 
-    private fun drawGrid(c: Canvas) {
+    private fun drawGrid(c: Canvas, ext: Float) {
         c.drawLines(radial, gridPaint)
         for (k in 0 until H_LINES) {
             val z = (k + gridOff) / H_LINES
             val y = HORIZON + (z.pow(2.2) * 180.0).toFloat()
-            c.drawLine(0f, y, 800f, y, gridPaint)
+            c.drawLine(-ext, y, 800f + ext, y, gridPaint)
         }
     }
 
@@ -174,7 +178,7 @@ class ArcadeRenderer(private val fonts: Fonts) : GaugeRenderer {
         }
     }
 
-    private fun drawStats(c: Canvas, f: FrameModel) {
+    private fun drawLeftStats(c: Canvas, f: FrameModel) {
         val clt = f.coolant
         stat(c, 30f, 180f, tH2o.get(textKey(clt)) { "H2O " + Fmt.temp(clt, false) }, clt, 40.0, 120.0, C_CYAN)
         val oil = f.oil
@@ -182,6 +186,9 @@ class ArcadeRenderer(private val fonts: Fonts) : GaugeRenderer {
             oil, 40.0, 140.0, C_YELLOW)
         val iat = f.iat
         stat(c, 30f, 284f, tAir.get(textKey(iat)) { "AIR " + Fmt.temp(iat, false) }, iat, 0.0, 80.0, C_VIOLET)
+    }
+
+    private fun drawRightStats(c: Canvas, f: FrameModel) {
         val thr = f.throttle
         stat(c, 612f, 180f, tThr.get(textKey(thr)) { "THR " + if (thr == null) Fmt.int(null) else Fmt.int(thr) + "%" },
             thr, 0.0, 100.0, C_PINK)

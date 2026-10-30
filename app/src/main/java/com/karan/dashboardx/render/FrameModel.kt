@@ -31,4 +31,6 @@ data class FrameModel(
     val driveMode: DriveMode = DriveMode.COMFORT,
     /** Wall-clock time of the frame (for a clock display). */
     val wallMs: Long = 0L,
+    /** Engine sound on: drawn by each style's [SoundButton]. */
+    val soundOn: Boolean = false,
 )

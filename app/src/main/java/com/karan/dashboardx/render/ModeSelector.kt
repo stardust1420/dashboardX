@@ -11,6 +11,8 @@ import com.karan.dashboardx.data.DriveMode
  * in its own type and colours and reports [hit] as its [GaugeRenderer.modeHit]. Allocation-free
  * per frame.
  *
+ * [draw] takes the side column's shift ([shifted]); [hit] follows it.
+ *
  * [label] must be centre-aligned; its colour is set per segment.
  */
 class ModeSelector(
@@ -27,7 +29,7 @@ class ModeSelector(
 ) {
     val rect = RectF(left, top, right, bottom)
 
-    /** The box grown on every side, so it is easy to hit at arm's length while driving. */
+    /** The box as last drawn, grown on every side, so it is easy to hit at arm's length while driving. */
     val hit = RectF(rect).apply { inset(-HIT_PAD, -HIT_PAD) }
 
     private val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = track }
@@ -38,7 +40,14 @@ class ModeSelector(
     private val seg = RectF()
     private val mid = middleOffset(label)
 
-    fun draw(c: Canvas, mode: DriveMode) {
+    fun draw(c: Canvas, mode: DriveMode, dx: Float = 0f) {
+        hit.set(rect)
+        hit.inset(-HIT_PAD, -HIT_PAD)
+        hit.offset(dx, 0f)
+        c.shifted(dx) { drawBox(c, mode) }
+    }
+
+    private fun drawBox(c: Canvas, mode: DriveMode) {
         c.drawRoundRect(rect, radius, radius, bg)
         c.drawRoundRect(rect, radius, radius, edge)
         val w = rect.width() / labels.size
@@ -58,7 +67,7 @@ class ModeSelector(
         }
     }
 
-    private companion object {
+    internal companion object {
         const val HIT_PAD = 14f
     }
 }

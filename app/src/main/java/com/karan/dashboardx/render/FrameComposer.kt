@@ -33,6 +33,7 @@ class FrameComposer(private val warnings: Warnings = Warnings()) {
         coolantWarn: Int,
         nowMs: Long,
         driveMode: DriveMode = DriveMode.COMFORT,
+        soundOn: Boolean = false,
     ): FrameModel {
         val dt = if (hasLast) (nowMs - lastMs).coerceIn(0L, MAX_DT_MS) else 0L
         if (!hasLast) t0Ms = nowMs
@@ -75,6 +76,7 @@ class FrameComposer(private val warnings: Warnings = Warnings()) {
             gear = gearEstimator.update(rawRpm, rawSpeed, nowMs),
             driveMode = driveMode,
             wallMs = nowMs,
+            soundOn = soundOn,
         )
     }
 

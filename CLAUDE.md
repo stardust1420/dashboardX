@@ -15,10 +15,11 @@ Sideloaded Android Auto OBD dashboard (Kotlin, `com.karan.dashboardx`). User gui
 - Bluetooth adapter type (Classic or BLE) is unknown, so keep both paths working
 - Car install: `tools/install-car.sh --skip-tests` with run_in_background (not `&`); it waits up to 5 min for the user to tap "Install as king", then checks the installer record and restarts Android Auto
 - Synth triggers (pops, turbo flutter) must work with an eased throttle: OBD readings plus the dash smoothing deliver a lift over ~0.2–0.3 s, so test with eased ramps, not instant steps
-- New style: `Style` enum, `rendererFor`, the cycle test in `CarStateTest`, both style lists in README, and a `ModeSelector` exposed as `modeHit`
+- New style: `Style` enum, `rendererFor`, the cycle test in `CarStateTest`, both style lists in README, a `ModeSelector` exposed as `modeHit`, a `SoundButton` exposed as `soundHit` (not under the host's action button, top right), and side columns slid out by `ext` with `shifted`
 
 ## Device
 - `adb exec-out screencap -p > "$scratchpad/screen.png"`, then Read it - see the phone screen instead of asking the user to describe it
-- Phone is 2400x1080 landscape: the 800x480 logical canvas maps as x*2.25+300, y*2.25. Tap with `adb shell input tap` one at a time and screenshot between taps; the user may be tapping the phone too
+- Phone is 2400x1080 landscape: the 800x480 logical canvas maps as x*2.25+300, y*2.25 (logical x spans -133..933, see `Viewport.ext`). Tap with `adb shell input tap` one at a time and screenshot between taps; the user may be tapping the phone too
 - Phone and laptop speakers roll off below ~100–300 Hz, so deep engine/turbo sounds read quieter there than in the car
-- `sdkmanager` can't download inside the sandbox (even with the proxy JVM flags); ask the user to run it in a normal Terminal. The DHU (`extras;google;auto`) isn't installed yet
+- `sdkmanager` can't download inside the sandbox (even with the proxy JVM flags); ask the user to run it in a normal Terminal
+- `tools/dhu.sh` opens the car screen (DHU 2.0, arm64) on the Mac; the user must first tap "Start head unit server" in Android Auto's developer menu, and again after Android Auto restarts

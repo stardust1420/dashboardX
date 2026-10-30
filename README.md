@@ -84,9 +84,9 @@ Open DashboardX on the phone. Until you choose an adapter or turn on Demo mode, 
 
 In Demo mode a small **DEMO** tag sits in the top-left corner, so fake data is never mistaken for the car.
 
-On the phone, a tap on the dashboard (anywhere except the buttons and the drive-mode selector) cycles the style: Racing, HUD, Arcade, Luxury, Cluster, Most Wanted, Cockpit. A tap on the **COMFORT / SPORT / SPORT+** selector steps the drive mode instead.
+On the phone, a tap on the dashboard (anywhere except the gear, the speaker and the drive-mode selector) cycles the style: Racing, HUD, Arcade, Luxury, Cluster, Most Wanted, Cockpit. A tap on the **COMFORT / SPORT / SPORT+** selector steps the drive mode instead.
 
-The speaker button next to the gear turns the engine sound on and off on the phone, the same way as the Sound icon in the car (see section 5). It starts **off** every time the app opens. It also switches off when you leave the app. Demo mode is a good way to try it.
+The speaker button drawn on the dashboard turns the engine sound on and off on the phone, the same way as in the car (see section 5). It starts **off** every time the app opens. It also switches off when you leave the app. Demo mode is a good way to try it.
 
 ## 4. Pair and choose the adapter
 
@@ -113,12 +113,12 @@ Other settings on the same screen: engine sound volume (0 to 100 %), fuel calibr
 3. On the car screen, open the app launcher and tap **DashboardX**.
 4. It should connect to the adapter within about 10 seconds.
 
-On the car screen the dashboard fills the whole app area:
+On the car screen the dashboard fills the whole app area, edge to edge (on a wide screen the side columns spread out):
 - **Tap anywhere on the dashboard** to cycle the style: Racing, HUD, Arcade, Luxury, Cluster, Most Wanted, Cockpit. The choice is remembered.
 - **Tap the COMFORT / SPORT / SPORT+ selector** (every style has one) to step the drive mode. The choice is remembered and shared by all styles.
-- **Sound** (the one button, a speaker icon in the top-right corner): a speaker with a cross means the engine sound is off, a speaker with sound waves means it is on. It starts **off** every time.
+- **Tap the speaker** (every style draws one in its own look, like the selector) to turn the engine sound on and off: a speaker with a cross means off, a glowing speaker with sound waves means on. It starts **off** every time. Where it sits: Racing, Arcade and Most Wanted bottom right; HUD under the speed tape; Luxury at the end of the header; Cluster and Cockpit top left.
 
-The engine sound is a smooth V8 note in the style of a Lexus: it rises evenly in pitch and brightness with the revs, with no hiss. Soft exhaust pops play when you lift off sharply, shift gear (the revs drop fast) or coast at high revs; steady driving stays clean. It plays in stereo on the car's media channel, so it uses all the speakers, and it lowers (ducks) your music instead of pausing it. When there is no RPM for about a second (engine off, adapter unplugged) it lets go and your music returns to full volume; it ducks again when RPM comes back. If the sound ever fails, the Sound icon switches back to off by itself.
+The engine sound is a smooth V8 note in the style of a Lexus: it rises evenly in pitch and brightness with the revs, with no hiss. Soft exhaust pops play when you lift off sharply, shift gear (the revs drop fast) or coast at high revs; steady driving stays clean. It plays in stereo on the car's media channel, so it uses all the speakers, and it lowers (ducks) your music instead of pausing it. When there is no RPM for about a second (engine off, adapter unplugged) it lets go and your music returns to full volume; it ducks again when RPM comes back. If the sound ever fails, the speaker switches back to off by itself.
 
 ## 6. Share a diagnostics log
 
@@ -158,7 +158,7 @@ The log includes the connection status, which sensors the car supports and a tim
 - **DEMO tag in the corner:** Demo mode is on and the numbers are simulated. Switch it off in Settings (or pick an adapter) to see the car.
 - **DashboardX missing from the car or Customize launcher:** run `adb logcat -d | grep CAR.VALIDATOR`. If it shows `Package DENIED; failed all other checks [com.karan.dashboardx]`, the install wasn't recorded as from the Play Store. Reinstall through KingInstaller (section 2).
 - **Black car screen:** open Diagnostics on the phone and look at the status and log. Check Unknown sources is still on, then unplug and replug the phone.
-- **No engine sound:** the Sound icon must show waves, not a cross (it resets to off each drive), the engine sound volume slider in Settings must not be at 0, and the car volume must be up.
+- **No engine sound:** the speaker must show waves, not a cross (it resets to off each drive), the engine sound volume slider in Settings must not be at 0, and the car volume must be up.
 - **"Set up DashboardX" still showing:** pick an adapter, or switch Demo mode on. On Android 12 or newer, also check the Bluetooth permission is granted. (Bluetooth being off shows "Reconnecting…", not this message.)
 
 ## For developers
@@ -166,3 +166,25 @@ The log includes the connection status, which sensors the car supports and a tim
 - `bash tools/jvmcheck.sh` is a quick compile and unit test loop that does not need Gradle.
 - Design: `docs/superpowers/specs/2026-10-29-obd-android-auto-dash-design.md`.
 - In-car checklist: `docs/superpowers/plans/2026-10-29-obd-android-auto-dash-incar.md`.
+
+### Car screen on the Mac
+
+Google's Desktop Head Unit (DHU) shows the Android Auto car screen in a window on the Mac, driven by the phone over USB. DashboardX looks and behaves there as it does in the car (click on the dash to tap it), so you can try styles and layouts without the car.
+
+One-time setup:
+1. Install the DHU in a normal Terminal:
+   ```
+   source env.sh
+   "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "extras;google;auto"
+   ```
+2. On the phone, open Android Auto settings (**Settings > Connected devices > Connection preferences > Android Auto**), scroll to **Version** and tap it about 10 times to turn on developer settings.
+
+Each time, with the phone plugged in by USB:
+1. On the phone, in Android Auto settings, tap the **three-dot menu > Start head unit server**. It stops when Android Auto restarts (for example after `tools/install-car.sh`), so start it again then.
+2. Run:
+   ```
+   tools/dhu.sh
+   ```
+   The script waits for the head unit server (up to 2 minutes), forwards the port and opens the car screen. Open **DashboardX** from its launcher. Close the window to stop.
+
+Options after `tools/dhu.sh` go to the DHU, for example `tools/dhu.sh -c config/default_720p.ini` for a 720p screen (the configs are in `$ANDROID_HOME/extras/google/auto/config`). DashboardX shows in the DHU only when installed through KingInstaller (section 2), as in the car.

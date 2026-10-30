@@ -22,9 +22,9 @@ import java.util.EnumMap
 
 /**
  * Draws the current [style] into the host's Surface at ~30 fps on a dedicated render thread,
- * fitted to the whole surface: full screen, with the host's Sound button floating on top.
- * A tap on the style's drive-mode selector steps the drive mode; a tap anywhere else calls [onTap]
- * (hosts with Car API level 5+).
+ * fitted to the whole surface: full screen and full width ([Viewport.ext]), with the host's one
+ * required action floating on top. A tap on the style's Sound toggle calls [onSoundTap], on its
+ * drive-mode selector steps the drive mode, anywhere else calls [onTap] (hosts with Car API level 5+).
  *
  * Threading: surface and lifecycle callbacks arrive on the main thread; frames are drawn on
  * [thread]. All loop start/stop decisions run on the render thread, so there is never more than
@@ -37,8 +37,14 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
     /** Called on the render thread with each frame's model, before it is drawn (the engine sound feed). */
     @Volatile var onFrame: ((FrameModel) -> Unit)? = null
 
-    /** Called on the main thread when the user taps the surface off the mode selector (the style switch). */
+    /** Called on the main thread when the user taps the surface off the mode selector and Sound toggle (the style switch). */
     var onTap: (() -> Unit)? = null
+
+    /** Called on the main thread when the user taps the style's Sound toggle. */
+    var onSoundTap: (() -> Unit)? = null
+
+    /** Engine sound on, as the Sound toggle shows it; read once per frame on the render thread. */
+    @Volatile var soundOn = false
 
     private val fonts = Fonts(carContext)
     private val renderers = EnumMap<Style, GaugeRenderer>(Style::class.java) // render thread only
@@ -95,10 +101,11 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
         val ly = vp.toLogicalY(y)
         // The renderers belong to the render thread, so the hit test runs there.
         handler.post {
-            if (renderers[style]?.modeHit?.contains(lx, ly) == true) {
-                DashRuntime.cycleDriveMode()
-            } else {
-                main.post { onTap?.invoke() }
+            val r = renderers[style]
+            when {
+                r?.soundHit?.contains(lx, ly) == true -> main.post { onSoundTap?.invoke() }
+                r?.modeHit?.contains(lx, ly) == true -> DashRuntime.cycleDriveMode()
+                else -> main.post { onTap?.invoke() }
             }
         }
     }
@@ -174,12 +181,12 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
             val save = canvas.save()
             try {
                 // Wall clock: CarState readings are stamped with System.currentTimeMillis().
-                val f = DashRuntime.frame(System.currentTimeMillis())
+                val f = DashRuntime.frame(System.currentTimeMillis(), soundOn)
                 onFrame?.invoke(f)
                 canvas.translate(vp.dx, vp.dy)
                 canvas.scale(vp.scale, vp.scale)
-                canvas.clipRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H)
-                r.draw(canvas, f)
+                canvas.clipRect(-vp.ext, 0f, Viewport.LOGICAL_W + vp.ext, Viewport.LOGICAL_H)
+                r.draw(canvas, f, vp.ext)
                 drew = true
             } catch (e: Exception) {
                 // A bug in one frame must not kill the render thread; log it (rate-limited) and

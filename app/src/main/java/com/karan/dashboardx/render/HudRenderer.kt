@@ -50,6 +50,9 @@ class HudRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val modeSel = ModeSelector(250f, 28f, 550f, 70f, text(17f, Paint.Align.CENTER, C_GREEN),
         intArrayOf(C_GREEN, C_GREEN, C_RED), 0xFF2FB86A.toInt(), C_BG, 0f, litText = C_BG)
     override val modeHit: RectF get() = modeSel.hit
+    // Under the speed tape.
+    private val soundBtn = SoundButton(660f, 402f, 712f, 446f, C_GREEN, 0xFF2FB86A.toInt(), C_BG, 0f)
+    override val soundHit: RectF get() = soundBtn.hit
     private val boxFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = C_BG }
     private val line = stroke(C_GREEN, 2f)
     private val lineRed = stroke(C_RED, 2f)
@@ -111,15 +114,23 @@ class HudRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val tIat = TextCache()
     private val tEco = TextCache()
 
-    override fun draw(c: Canvas, f: FrameModel) {
-        c.drawRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H, bgPaint)
-        tape(c, RPM_X, f.rpm, RPM_PER_UNIT, 500, "RPM", rpmLabels, f.redline.toDouble(), tRpm, rpmBox)
-        tape(c, SPEED_X, f.speed, SPEED_PER_UNIT, 10, "KM/H", speedLabels, Double.MAX_VALUE, tSpeed, speedBox)
-        drawGear(c, f)
+    override fun draw(c: Canvas, f: FrameModel, ext: Float) {
+        c.drawRect(-ext, 0f, Viewport.LOGICAL_W + ext, Viewport.LOGICAL_H, bgPaint)
+        // The tapes run to the top, so they slide only half way out: the top-right corner stays
+        // clear for the phone's gear and the car host's action button.
+        val side = ext / 2f
+        c.shifted(-side) {
+            tape(c, RPM_X, f.rpm, RPM_PER_UNIT, 500, "RPM", rpmLabels, f.redline.toDouble(), tRpm, rpmBox)
+        }
+        c.shifted(side) {
+            tape(c, SPEED_X, f.speed, SPEED_PER_UNIT, 10, "KM/H", speedLabels, Double.MAX_VALUE, tSpeed, speedBox)
+            drawGear(c, f)
+        }
         drawReticle(c, f)
         drawReadouts(c, f)
         modeSel.draw(c, f.driveMode)
-        drawStatusOverlay(c, f, fonts)
+        soundBtn.draw(c, f.soundOn, side)
+        drawStatusOverlay(c, f, fonts, ext)
     }
 
     private fun tape(

@@ -134,11 +134,11 @@ object DashRuntime {
     }
 
     /** Builds the next frame; advances the smoothers by the time since the previous call. */
-    fun frame(nowMs: Long): FrameModel {
+    fun frame(nowMs: Long, soundOn: Boolean = false): FrameModel {
         val f: FrameModel
         val chime: Set<Warning>
         synchronized(composer) {
-            f = composer.compose(_state.value, _status.value, redline, coolantWarn, nowMs, driveMode)
+            f = composer.compose(_state.value, _status.value, redline, coolantWarn, nowMs, driveMode, soundOn)
             chime = composer.chime
         }
         if (chime.isNotEmpty()) {

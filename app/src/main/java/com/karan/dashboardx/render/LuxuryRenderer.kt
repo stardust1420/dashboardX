@@ -25,7 +25,7 @@ import java.util.Locale
  * Left: the picked drive mode with gear and speed, a mode track (Comfort / Sport / Sport+, tap to
  * change; it is this style's [modeHit]), a menu
  * of live readings whose rows carry a level bar, one row highlighted, and a strip of secondary
- * readings. Right: the car under a spotlight on a glossy floor with its reflection; the floor glow
+ * readings, with the Sound toggle at the end of the header. Right: the car under a spotlight on a glossy floor with its reflection; the floor glow
  * takes the mode's colour and brightens with rpm. The car is [Fonts.carPhoto] when present, else a
  * drawn side profile (without reflection).
  */
@@ -127,7 +127,10 @@ class LuxuryRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val chevronPath = Path().apply { moveTo(28f, 296f); lineTo(18f, 316f); lineTo(28f, 336f) }
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val trackRect = RectF()
-    override val modeHit = RectF(LEFT - 14f, TRACK_Y - 40f, LEFT + 3 * TRACK_SEG + 2 * TRACK_GAP + 14f, TRACK_Y + 20f)
+    private val modeRect = RectF(LEFT - 14f, TRACK_Y - 40f, LEFT + 3 * TRACK_SEG + 2 * TRACK_GAP + 14f, TRACK_Y + 20f)
+    override val modeHit = RectF(modeRect)
+    private val soundBtn = SoundButton(ROW_RIGHT - 36f, 48f, ROW_RIGHT, 84f, C_TEXT, C_DIM, 0xFF1A1D22.toInt(), 18f)
+    override val soundHit: RectF get() = soundBtn.hit
     private val radio = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.5f; color = C_SOFT }
     private val radioDot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = C_TEXT }
     private val rowFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -194,15 +197,23 @@ class LuxuryRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val tAir = TextCache()
     private val tTrip = TextCache()
 
-    override fun draw(c: Canvas, f: FrameModel) {
-        c.drawRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H, bgPaint)
-        c.drawRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H, stagePaint) // fades out by itself: no edges
-        drawStage(c, f)
-        drawHeader(c, f)
-        drawMode(c, f)
-        drawRows(c, f)
-        drawStats(c, f)
-        drawStatusOverlay(c, f, fonts)
+    override fun draw(c: Canvas, f: FrameModel, ext: Float) {
+        c.drawRect(-ext, 0f, Viewport.LOGICAL_W + ext, Viewport.LOGICAL_H, bgPaint)
+        c.shifted(ext) {
+            // Fades out by itself: no edges. Local x -2·ext..800 is the whole screen.
+            c.drawRect(-2f * ext, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H, stagePaint)
+            drawStage(c, f)
+        }
+        c.shifted(-ext) {
+            drawHeader(c, f)
+            drawMode(c, f)
+            drawRows(c, f)
+            drawStats(c, f)
+        }
+        modeHit.set(modeRect)
+        modeHit.offset(-ext, 0f)
+        soundBtn.draw(c, f.soundOn, -ext)
+        drawStatusOverlay(c, f, fonts, ext)
     }
 
     private fun drawHeader(c: Canvas, f: FrameModel) {

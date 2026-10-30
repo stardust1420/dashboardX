@@ -194,6 +194,9 @@ class ClusterRenderer(private val fonts: Fonts) : GaugeRenderer {
         text(sansMedium, 15f, C_TEXT, Paint.Align.CENTER).apply { letterSpacing = 0.02f },
         intArrayOf(C_TEXT, C_ORANGE, C_RED), C_SOFT, 0xFF0B0F18.toInt(), 22f)
     override val modeHit: RectF get() = modeSel.hit
+    // Top left, clear of the speed scale (the host's buttons float over the top right).
+    private val soundBtn = SoundButton(38f, 56f, 82f, 100f, C_TEXT, C_SOFT, 0xFF0B0F18.toInt(), 22f)
+    override val soundHit: RectF get() = soundBtn.hit
     private val bottomLeft = text(sans, 17f, C_TEXT, Paint.Align.LEFT)
     private val bottomRight = text(sans, 17f, C_TEXT, Paint.Align.RIGHT)
     private val midScale = middleOffset(scaleLeft)
@@ -220,27 +223,34 @@ class ClusterRenderer(private val fonts: Fonts) : GaugeRenderer {
     private var peakAtS = 0.0
     private var lastS = Double.NaN
 
-    override fun draw(c: Canvas, f: FrameModel) {
-        c.drawRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H, bgPaint)
+    override fun draw(c: Canvas, f: FrameModel, ext: Float) {
+        c.drawRect(-ext, 0f, Viewport.LOGICAL_W + ext, Viewport.LOGICAL_H, bgPaint)
         val save = c.save()
         c.clipRect(150f, 40f, 650f, 460f)
         c.drawLines(lattice, latticePaint)
         c.restoreToCount(save)
-        c.drawRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H, vignette)
-        c.drawCircle(300f, 360f, 150f, glowL)
-        c.drawCircle(500f, 360f, 150f, glowR)
+        c.drawRect(-ext, 0f, Viewport.LOGICAL_W + ext, Viewport.LOGICAL_H, vignette)
 
-        val speed = f.speed
-        gauge(c, false, speed?.let { Fmt.clamp01(it, 0.0, SPEED_MAX).toFloat() }, null, null)
         val rpmFrac = f.rpm?.let { Fmt.clamp01(it, 0.0, TACH_MAX_RPM).toFloat() }
-        gauge(c, true, rpmFrac, Fmt.clamp01(f.redline.toDouble(), 0.0, TACH_MAX_RPM).toFloat(), updatePeak(rpmFrac, f.tSec))
-        strip(c, false, f.coolant?.let { Fmt.clamp01(it, 40.0, 120.0).toFloat() }, coolantFill, "CLT",
-            Warning.OVERHEAT in f.warnings)
-        strip(c, true, f.throttle?.let { Fmt.clamp01(it, 0.0, 100.0).toFloat() }, throttleFill, "THR", false)
-        scale(c)
+        val peak = updatePeak(rpmFrac, f.tSec)
+        c.shifted(-ext) {
+            c.drawCircle(300f, 360f, 150f, glowL)
+            val speed = f.speed
+            gauge(c, false, speed?.let { Fmt.clamp01(it, 0.0, SPEED_MAX).toFloat() }, null, null)
+            strip(c, false, f.coolant?.let { Fmt.clamp01(it, 40.0, 120.0).toFloat() }, coolantFill, "CLT",
+                Warning.OVERHEAT in f.warnings)
+            scaleLeft(c)
+        }
+        c.shifted(ext) {
+            c.drawCircle(500f, 360f, 150f, glowR)
+            gauge(c, true, rpmFrac, Fmt.clamp01(f.redline.toDouble(), 0.0, TACH_MAX_RPM).toFloat(), peak)
+            strip(c, true, f.throttle?.let { Fmt.clamp01(it, 0.0, 100.0).toFloat() }, throttleFill, "THR", false)
+            scaleRight(c)
+        }
         drawCentre(c, f)
-        drawBottom(c, f)
-        drawStatusOverlay(c, f, fonts)
+        drawBottom(c, f, ext)
+        soundBtn.draw(c, f.soundOn, -ext)
+        drawStatusOverlay(c, f, fonts, ext)
     }
 
     /**
@@ -311,17 +321,13 @@ class ClusterRenderer(private val fonts: Fonts) : GaugeRenderer {
         c.drawText(label, mx(mirror, BX + STRIP_DX + STRIP / 2f), BOT + 18f, stripLabel)
     }
 
-    private fun scale(c: Canvas) {
-        // Minor ticks: every 10 km/h and every 500 rpm, between the labelled ones.
+    // Minor ticks: every 10 km/h and every 500 rpm, between the labelled ones.
+
+    private fun scaleLeft(c: Canvas) {
         for (i in 1 until 20 step 2) {
             val fr = i / 20f
             val x = outerX(fr)
             c.drawLine(x - 8f, yAt(fr), x - 4f, yAt(fr), minorTick)
-        }
-        for (i in 1 until 14 step 2) {
-            val fr = i / 14f
-            val x = Viewport.LOGICAL_W - outerX(fr)
-            c.drawLine(x + 4f, yAt(fr), x + 8f, yAt(fr), minorTick)
         }
         for (i in speedLabels.indices) {
             val fr = i / (speedLabels.size - 1f)
@@ -331,6 +337,14 @@ class ClusterRenderer(private val fonts: Fonts) : GaugeRenderer {
             c.drawText(speedLabels[i], x - 18f, y + midScale, scaleLeft)
         }
         c.drawText("km/h", BX + 6f, TOP - 14f, unitLeft)
+    }
+
+    private fun scaleRight(c: Canvas) {
+        for (i in 1 until 14 step 2) {
+            val fr = i / 14f
+            val x = Viewport.LOGICAL_W - outerX(fr)
+            c.drawLine(x + 4f, yAt(fr), x + 8f, yAt(fr), minorTick)
+        }
         for (i in rpmLabels.indices) {
             val fr = i / (rpmLabels.size - 1f)
             val x = Viewport.LOGICAL_W - outerX(fr)
@@ -370,30 +384,39 @@ class ClusterRenderer(private val fonts: Fonts) : GaugeRenderer {
         if (gear != null) c.drawText(tGear.get(gear.toLong()) { gear.toString() }, 441f, y - 6f, gearSub)
     }
 
-    private fun drawBottom(c: Canvas, f: FrameModel) {
+    private fun drawBottom(c: Canvas, f: FrameModel, ext: Float) {
         val y = 400f
-        baseline.shader = baseLeft
-        c.drawLine(40f, y, 330f, y, baseline)
-        baseline.shader = baseRight
-        c.drawLine(470f, y, 760f, y, baseline)
-        c.drawLine(300f, y, 340f, y, accent)
-        c.drawLine(460f, y, 500f, y, accent)
+        // Each side's baseline and accent slide out with its gauge.
+        c.shifted(-ext) {
+            baseline.shader = baseLeft
+            c.drawLine(40f, y, 330f, y, baseline)
+            c.drawLine(300f, y, 340f, y, accent)
+        }
+        c.shifted(ext) {
+            baseline.shader = baseRight
+            c.drawLine(470f, y, 760f, y, baseline)
+            c.drawLine(460f, y, 500f, y, accent)
+        }
 
         val cy = 440f
         val by = cy + midBottom
-        drop(c, 52f, cy)
-        val kml = f.instantKml
-        c.drawText(tKml.get(textKey(kml, 10.0)) { Fmt.kml(kml) + " km/l" }, 66f, by, bottomLeft)
-        c.drawText(tClock.get(f.wallMs / 60_000L) { date.time = f.wallMs; clock.format(date) }, 210f, by, bottomLeft)
+        c.shifted(-ext) {
+            drop(c, 52f, cy)
+            val kml = f.instantKml
+            c.drawText(tKml.get(textKey(kml, 10.0)) { Fmt.kml(kml) + " km/l" }, 66f, by, bottomLeft)
+            c.drawText(tClock.get(f.wallMs / 60_000L) { date.time = f.wallMs; clock.format(date) }, 210f, by, bottomLeft)
+        }
         modeSel.draw(c, f.driveMode)
-        val iat = f.iat
-        val iatStr = tIat.get(textKey(iat)) { "Air " + Fmt.temp(iat, false) }
-        c.drawText(iatStr, 612f, by, bottomRight)
-        thermometer(c, 612f - bottomRight.measureText(iatStr) - 12f, cy)
-        val oil = f.oil
-        val oilStr = tOil.get(textKey(oil, unsupported = f.oilUnsupported)) { "Oil " + Fmt.temp(oil, f.oilUnsupported) }
-        c.drawText(oilStr, 752f, by, bottomRight)
-        thermometer(c, 752f - bottomRight.measureText(oilStr) - 12f, cy)
+        c.shifted(ext) {
+            val iat = f.iat
+            val iatStr = tIat.get(textKey(iat)) { "Air " + Fmt.temp(iat, false) }
+            c.drawText(iatStr, 612f, by, bottomRight)
+            thermometer(c, 612f - bottomRight.measureText(iatStr) - 12f, cy)
+            val oil = f.oil
+            val oilStr = tOil.get(textKey(oil, unsupported = f.oilUnsupported)) { "Oil " + Fmt.temp(oil, f.oilUnsupported) }
+            c.drawText(oilStr, 752f, by, bottomRight)
+            thermometer(c, 752f - bottomRight.measureText(oilStr) - 12f, cy)
+        }
     }
 
     /** Fuel drop icon centred on (x, y). */

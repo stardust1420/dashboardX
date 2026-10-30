@@ -15,7 +15,11 @@ import com.karan.dashboardx.render.GaugeRenderer
 import com.karan.dashboardx.render.Viewport
 import com.karan.dashboardx.render.rendererFor
 
-/** Full-screen live dashboard: the current style drawn every frame, fitted to the view. */
+/**
+ * Full-screen live dashboard: the current style drawn every frame, fitted to the view (full width,
+ * see [Viewport.ext]). A tap on the style's Sound toggle calls [onSoundTap], on its drive-mode
+ * selector steps the mode, anywhere else cycles the style.
+ */
 class DashView(ctx: Context) : View(ctx) {
     private val fonts = Fonts(ctx)
     private var style: Style? = null
@@ -25,6 +29,12 @@ class DashView(ctx: Context) : View(ctx) {
     /** Called on the UI thread with each frame's model, before it is drawn (the engine sound feed). */
     var onFrame: ((FrameModel) -> Unit)? = null
 
+    /** Called on the UI thread when the user taps the style's Sound toggle. */
+    var onSoundTap: (() -> Unit)? = null
+
+    /** Engine sound on, as the Sound toggle shows it. */
+    var soundOn = false
+
     private val slop = ViewConfiguration.get(ctx).scaledTouchSlop
     private var downX = 0f
     private var downY = 0f
@@ -33,7 +43,7 @@ class DashView(ctx: Context) : View(ctx) {
     init {
         DashRuntime.init(ctx)
         isClickable = true
-        contentDescription = "Dashboard. Tap the mode selector to change drive mode, anywhere else to change style."
+        contentDescription = "Dashboard. Tap the speaker to switch the engine sound, the mode selector to change drive mode, anywhere else to change style."
         setBackgroundColor(Color.BLACK)
     }
 
@@ -48,13 +58,17 @@ class DashView(ctx: Context) : View(ctx) {
                 val dx = e.x - downX
                 val dy = e.y - downY
                 if (dx * dx + dy * dy <= slop * slop) {
-                    // On the drive-mode selector: step the mode. Anywhere else: change the style.
-                    val hit = renderer?.modeHit?.contains(vp.toLogicalX(e.x), vp.toLogicalY(e.y)) == true
-                    if (hit) {
-                        DashRuntime.cycleDriveMode()
-                        invalidate()
-                    } else {
-                        performClick()
+                    // Sound toggle: switch the sound. Drive-mode selector: step the mode. Anywhere else: change the style.
+                    val lx = vp.toLogicalX(e.x)
+                    val ly = vp.toLogicalY(e.y)
+                    val r = renderer
+                    when {
+                        r?.soundHit?.contains(lx, ly) == true -> onSoundTap?.invoke()
+                        r?.modeHit?.contains(lx, ly) == true -> {
+                            DashRuntime.cycleDriveMode()
+                            invalidate()
+                        }
+                        else -> performClick()
                     }
                 }
                 return true
@@ -84,12 +98,12 @@ class DashView(ctx: Context) : View(ctx) {
             val s = DashRuntime.settings.style
             val r = renderer?.takeIf { style == s } ?: rendererFor(s, fonts).also { renderer = it; style = s }
             // Wall clock: CarState readings are stamped with System.currentTimeMillis().
-            val f = DashRuntime.frame(System.currentTimeMillis())
+            val f = DashRuntime.frame(System.currentTimeMillis(), soundOn)
             onFrame?.invoke(f)
             c.translate(vp.dx, vp.dy)
             c.scale(vp.scale, vp.scale)
-            c.clipRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H)
-            r.draw(c, f)
+            c.clipRect(-vp.ext, 0f, Viewport.LOGICAL_W + vp.ext, Viewport.LOGICAL_H)
+            r.draw(c, f, vp.ext)
             failureLog.success()
         } catch (e: Exception) {
             // Keep the UI alive: log (rate-limited) and try again next frame.

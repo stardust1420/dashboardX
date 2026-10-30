@@ -98,6 +98,8 @@ class RacingRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val modeSel = ModeSelector(18f, 424f, 308f, 466f, text(800, 13f, Paint.Align.CENTER, C_LABEL),
         intArrayOf(C_CYAN, C_YELLOW, C_RED), C_SOFT, C_TRACK, 10f)
     override val modeHit: RectF get() = modeSel.hit
+    private val soundBtn = SoundButton(734f, 424f, 782f, 466f, C_CYAN, C_SOFT, C_TRACK, 10f)
+    override val soundHit: RectF get() = soundBtn.hit
 
     // Canvas textBaseline='middle' emulation: per-paint offset, computed once.
     private val midTick = middleOffset(tickLabel)
@@ -133,13 +135,15 @@ class RacingRenderer(private val fonts: Fonts) : GaugeRenderer {
 
     private fun angle(rpm: Double): Double = A0 + Fmt.clamp01(rpm, 0.0, TACH_MAX_RPM) * SWEEP
 
-    override fun draw(c: Canvas, f: FrameModel) {
-        c.drawRect(0f, 0f, Viewport.LOGICAL_W, Viewport.LOGICAL_H, bgPaint)
+    override fun draw(c: Canvas, f: FrameModel, ext: Float) {
+        c.drawRect(-ext, 0f, Viewport.LOGICAL_W + ext, Viewport.LOGICAL_H, bgPaint)
         drawShiftLights(c, f)
         drawTach(c, f)
-        drawBars(c, f)
-        modeSel.draw(c, f.driveMode)
-        drawStatusOverlay(c, f, fonts)
+        c.shifted(-ext) { drawLeftBars(c, f) }
+        c.shifted(ext) { drawRightBars(c, f) }
+        modeSel.draw(c, f.driveMode, -ext)
+        soundBtn.draw(c, f.soundOn, ext)
+        drawStatusOverlay(c, f, fonts, ext)
     }
 
     private fun drawShiftLights(c: Canvas, f: FrameModel) {
@@ -215,7 +219,7 @@ class RacingRenderer(private val fonts: Fonts) : GaugeRenderer {
         c.drawText(tGear.get(textKey(gear?.toDouble())) { Fmt.gear(gear) }, gearRect.centerX(), y + midGear, gearText)
     }
 
-    private fun drawBars(c: Canvas, f: FrameModel) {
+    private fun drawLeftBars(c: Canvas, f: FrameModel) {
         val clt = f.coolant
         bar(c, 36f, 110f, "COOLANT", tClt.get(textKey(clt)) { Fmt.temp(clt, false) },
             clt, 40.0, 120.0, Warning.OVERHEAT in f.warnings)
@@ -225,6 +229,9 @@ class RacingRenderer(private val fonts: Fonts) : GaugeRenderer {
         val iat = f.iat
         bar(c, 36f, 320f, "INTAKE AIR", tIat.get(textKey(iat)) { Fmt.temp(iat, false) },
             iat, 0.0, 80.0, iat != null && iat >= IAT_WARN)
+    }
+
+    private fun drawRightBars(c: Canvas, f: FrameModel) {
         val thr = f.throttle
         bar(c, 614f, 110f, "THROTTLE", tThr.get(textKey(thr)) { if (thr == null) Fmt.int(null) else Fmt.int(thr) + "%" },
             thr, 0.0, 100.0, false)

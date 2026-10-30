@@ -22,7 +22,8 @@ import kotlin.math.sin
  * (rpm left, speed right), each with an outer side arc (coolant left, throttle right). Between
  * them a perspective road scrolls with speed under our car seen from behind; its tail lights
  * brighten off throttle. Above the road: the drive-mode selector, a dot-matrix km/l history and a
- * gear ring. Top bar: oil, air, km/l; bottom bar: date, time, trip average.
+ * gear ring. Top bar: oil, air, km/l; bottom bar: date, time, trip average. Sound toggle: top left.
+ * On a wide screen the bezel stretches and the gauges slide out with it.
  */
 class CockpitRenderer(private val fonts: Fonts) : GaugeRenderer {
 
@@ -66,6 +67,9 @@ class CockpitRenderer(private val fonts: Fonts) : GaugeRenderer {
 
         const val GEAR_X = 476f
         const val GEAR_Y = 174f
+
+        /** Floats in [ticks] per gauge (13 lines of 4), left gauge first. */
+        const val TICKS_PER_SIDE = 13 * 4
     }
 
     private val sans = Typeface.create("sans-serif", Typeface.NORMAL)
@@ -83,7 +87,7 @@ class CockpitRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val bgPaint = Paint().apply {
         shader = LinearGradient(0f, 0f, 0f, 480f, C_BG_TOP, C_BG_BOTTOM, Shader.TileMode.CLAMP)
     }
-    private val bezelRect = RectF(14f, 34f, 786f, 462f)
+    private val bezelRect = RectF() // 14..786 plus ext, set per frame
     private val bezelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = C_BEZEL }
     private val bezelEdge = stroke(1.5f, C_EDGE)
     private val glowL = Paint().apply {
@@ -175,6 +179,8 @@ class CockpitRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val modeSel = ModeSelector(256f, 96f, 544f, 138f, text(sansMedium, 15f, C_TEXT),
         intArrayOf(C_LANE, C_ACCENT, C_RED), C_SOFT, 0xFF16171E.toInt(), 21f)
     override val modeHit: RectF get() = modeSel.hit
+    private val soundBtn = SoundButton(44f, 52f, 88f, 96f, C_ACCENT, C_SOFT, 0xFF16171E.toInt(), 22f)
+    override val soundHit: RectF get() = soundBtn.hit
     private val spark = FloatArray(SPARK_COLS) { -1f } // km/l share 0..1 per column, -1 = no sample
     private var sparkHead = 0
     private var nextSparkT = 0.0
@@ -218,19 +224,22 @@ class CockpitRenderer(private val fonts: Fonts) : GaugeRenderer {
     private val tClock = TextCache()
     private val tDay = TextCache()
 
-    override fun draw(c: Canvas, f: FrameModel) {
+    override fun draw(c: Canvas, f: FrameModel, ext: Float) {
         advance(f)
-        c.drawRect(0f, 0f, 800f, 480f, bgPaint)
+        c.drawRect(-ext, 0f, 800f + ext, 480f, bgPaint)
+        bezelRect.set(14f - ext, 34f, 786f + ext, 462f)
         c.drawRoundRect(bezelRect, 44f, 44f, bezelPaint)
         c.drawRoundRect(bezelRect, 44f, 44f, bezelEdge)
-        c.drawCircle(LCX, GCY, 170f, glowL)
-        c.drawCircle(RCX, GCY, 170f, glowR)
+        c.shifted(-ext) { c.drawCircle(LCX, GCY, 170f, glowL) }
+        c.shifted(ext) { c.drawCircle(RCX, GCY, 170f, glowR) }
         drawRoad(c, f)
         drawCar(c, f)
-        drawGauges(c, f)
+        c.shifted(-ext) { drawRpmGauge(c, f) }
+        c.shifted(ext) { drawSpeedGauge(c, f) }
         drawCentre(c, f)
         drawBars(c, f)
-        drawStatusOverlay(c, f, fonts)
+        soundBtn.draw(c, f.soundOn, -ext)
+        drawStatusOverlay(c, f, fonts, ext)
     }
 
     private fun advance(f: FrameModel) {
@@ -307,7 +316,7 @@ class CockpitRenderer(private val fonts: Fonts) : GaugeRenderer {
 
     // ---- gauges ----
 
-    private fun drawGauges(c: Canvas, f: FrameModel) {
+    private fun drawRpmGauge(c: Canvas, f: FrameModel) {
         val rpm = f.rpm
         val hot = rpm != null && rpm >= f.redline
         ring(c, lInner, rpm?.let { Fmt.clamp01(it, 0.0, TACH_MAX_RPM) }, if (hot) C_RED else C_ACCENT)
@@ -320,13 +329,7 @@ class CockpitRenderer(private val fonts: Fonts) : GaugeRenderer {
             c.drawText("rpm", LCX, GCY + 38f, unitText)
         }
 
-        val speed = f.speed
-        ring(c, rInner, speed?.let { Fmt.clamp01(it, 0.0, SPEED_MAX) }, C_ACCENT)
-        c.drawText("SPEED", RCX, GCY - 38f + midGauge, gaugeLabel)
-        c.drawText(tSpeed.get(textKey(speed)) { Fmt.int(speed) }, RCX, GCY + 4f + midSpeed, speedValue)
-        c.drawText("km/h", RCX, GCY + 42f, unitText)
-
-        c.drawLines(ticks, tickPaint)
+        c.drawLines(ticks, 0, TICKS_PER_SIDE, tickPaint)
         // Coolant on the left side arc, filling upward from the bottom-left.
         val clt = f.coolant
         val cltFrac = clt?.let { Fmt.clamp01(it, 40.0, 120.0) } ?: 0.0
@@ -338,7 +341,16 @@ class CockpitRenderer(private val fonts: Fonts) : GaugeRenderer {
         c.drawText("C", LCX - 58f, GCY + OUTER_R + 20f, sideLabel)
         c.drawText("COOLANT", 70f, 444f, sideNameL)
         c.drawText(tClt.get(textKey(clt)) { Fmt.temp(clt, false) }, 140f, 444f, sideValueL)
+    }
 
+    private fun drawSpeedGauge(c: Canvas, f: FrameModel) {
+        val speed = f.speed
+        ring(c, rInner, speed?.let { Fmt.clamp01(it, 0.0, SPEED_MAX) }, C_ACCENT)
+        c.drawText("SPEED", RCX, GCY - 38f + midGauge, gaugeLabel)
+        c.drawText(tSpeed.get(textKey(speed)) { Fmt.int(speed) }, RCX, GCY + 4f + midSpeed, speedValue)
+        c.drawText("km/h", RCX, GCY + 42f, unitText)
+
+        c.drawLines(ticks, TICKS_PER_SIDE, TICKS_PER_SIDE, tickPaint)
         // Throttle on the right side arc, filling upward from the bottom-right.
         val thr = f.throttle
         val thrFrac = thr?.let { Fmt.clamp01(it, 0.0, 100.0) } ?: 0.0

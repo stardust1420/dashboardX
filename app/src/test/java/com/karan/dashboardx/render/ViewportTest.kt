@@ -9,6 +9,14 @@ class ViewportTest {
         assertEquals(1.5f, v.scale, 0.0001f)
         assertEquals(40f, v.dx, 0.0001f)
         assertEquals(0f, v.dy, 0.0001f)
+        assertEquals(26.6667f, v.ext, 0.001f) // (1280 / 1.5 - 800) / 2
+    }
+
+    @Test fun viewport_tall_hasNoExt() {
+        val v = Viewport.fit(0, 0, 800, 600)
+        assertEquals(1f, v.scale, 0.0001f)
+        assertEquals(60f, v.dy, 0.0001f)
+        assertEquals(0f, v.ext, 0.0001f)
     }
 
     @Test fun viewport_offsetArea() {
