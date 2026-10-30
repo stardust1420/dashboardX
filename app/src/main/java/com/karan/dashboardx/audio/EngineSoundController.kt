@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import com.karan.dashboardx.DashRuntime
+import com.karan.dashboardx.data.DriveMode
 
 /**
  * Plays [EngineSynth] live over whatever else is playing (music ducks, it does not pause).
@@ -24,7 +25,8 @@ import com.karan.dashboardx.DashRuntime
  * - If the audio thread dies (AudioTrack write error, build failure or exception), the sound is
  *   switched off ([enabled] becomes false), focus is abandoned, the reason is logged and
  *   [onStateChanged] is posted to the main thread so the UI can refresh its Sound icon.
- * - Volume follows `DashRuntime.settings.soundVolume`, re-read every block.
+ * - Volume follows `DashRuntime.settings.soundVolume` and the voice follows the drive mode
+ *   ([EngineSynth.Tune]), both re-read every block.
  * - Nothing here throws to the caller; failures go to `DashRuntime.diag`.
  *
  * Threading: [enabled], [update] and [release] may be called from any thread ([update] is called
@@ -256,7 +258,7 @@ class EngineSoundController(ctx: Context) {
                 val silentMs = if (silentSinceNs < 0) 0L else (now - silentSinceNs) / 1_000_000L
                 manageIdleFocus(on, liveRpm != null, silentMs)
                 val target = if (on && liveRpm != null) focusGain else 0f
-                synth.render(block, rpm, throttle, volume())
+                synth.render(block, rpm, throttle, volume(), tune())
                 for (i in block.indices) {
                     gain = when {
                         gain < target -> minOf(target, gain + fadeStep)
@@ -321,6 +323,12 @@ class EngineSoundController(ctx: Context) {
         DashRuntime.settings.soundVolume.coerceIn(0f, 1f)
     } catch (e: Exception) {
         DEFAULT_VOLUME
+    }
+
+    private fun tune(): EngineSynth.Tune = when (DashRuntime.driveMode) {
+        DriveMode.COMFORT -> EngineSynth.Tune.COMFORT
+        DriveMode.SPORT -> EngineSynth.Tune.SPORT
+        DriveMode.SPORT_PLUS -> EngineSynth.Tune.SPORT_PLUS
     }
 
     private fun log(what: String, e: Exception) {

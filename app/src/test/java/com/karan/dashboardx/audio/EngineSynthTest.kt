@@ -10,13 +10,18 @@ import kotlin.math.exp
 import kotlin.math.sqrt
 
 class EngineSynthTest {
-    private fun render(rpm: Double, throttle: Double, volume: Float, n: Int = 4410, warmup: Int = 0): FloatArray {
+    private fun render(
+        rpm: Double, throttle: Double, volume: Float, n: Int = 4410, warmup: Int = 0,
+        tune: EngineSynth.Tune = EngineSynth.Tune.COMFORT,
+    ): FloatArray {
         val s = EngineSynth()
-        if (warmup > 0) s.render(FloatArray(warmup), rpm, throttle, volume)
+        if (warmup > 0) s.render(FloatArray(warmup), rpm, throttle, volume, tune)
         val out = FloatArray(n)
-        s.render(out, rpm, throttle, volume)
+        s.render(out, rpm, throttle, volume, tune)
         return out
     }
+
+    private fun maxStep(x: FloatArray): Float = (1 until x.size).maxOf { abs(x[it] - x[it - 1]) }
 
     private fun rms(x: FloatArray): Double = sqrt(x.sumOf { it.toDouble() * it } / x.size)
 
@@ -122,6 +127,82 @@ class EngineSynthTest {
             assertTrue("seed $seed: lifted peak $pk steady peak $base", pk > 1.3 * base)
             assertTrue("seed $seed: pops stay gentle, peak $pk", pk < 0.6f)
         }
+    }
+
+    /** Sport is louder than Comfort; Sport+ is no louder than Sport (it only adds the turbo). */
+    @Test fun tune_loudnessSteps() {
+        val comfort = rms(render(3000.0, 50.0, 1f, n = 44100, warmup = 44100))
+        val sport = rms(render(3000.0, 50.0, 1f, n = 44100, warmup = 44100, tune = EngineSynth.Tune.SPORT))
+        val plus = rms(render(3000.0, 50.0, 1f, n = 44100, warmup = 44100, tune = EngineSynth.Tune.SPORT_PLUS))
+        assertTrue("comfort=$comfort sport=$sport", sport > 1.1 * comfort)
+        assertTrue("sport=$sport plus=$plus", plus < 1.05 * sport)
+        val peak = render(7000.0, 100.0, 1f, n = 44100, tune = EngineSynth.Tune.SPORT_PLUS).maxOf { abs(it) }
+        assertTrue("peak $peak", peak < 0.55f)
+    }
+
+    /** Sport is still a clean tone at steady revs: no noise, the waveform repeats every revolution. */
+    @Test fun tune_sportStaysPeriodic() {
+        val out = render(3000.0, 40.0, 1f, n = 8820, warmup = 44100, tune = EngineSynth.Tune.SPORT)
+        for (i in 0 until 4000) assertEquals("sample $i", out[i], out[i + 882], 2e-3f)
+    }
+
+    /** Coasting at 1400 rpm: Comfort stays clean, Sport (overrun pops from 1300 rpm) pops. */
+    @Test fun tune_sportPopsWhereComfortDoesNot() {
+        val comfort = render(1400.0, 0.0, 1f, n = 88200, warmup = 44100)
+        val plus = render(1400.0, 0.0, 1f, n = 88200, warmup = 44100, tune = EngineSynth.Tune.SPORT)
+        val cPeak = comfort.maxOf { abs(it) }
+        val pPeak = plus.maxOf { abs(it) }
+        assertTrue("comfort coasting has no pops: peak $cPeak", cPeak < 0.2f)
+        assertTrue("sport pops: peak $pPeak vs comfort $cPeak", pPeak > 1.5f * cPeak)
+    }
+
+    /** Sport+ minus Sport, rendered side by side through the same inputs: the turbo on its own. */
+    private fun turboOnly(steps: List<Pair<Double, Double>>, blocks: Int): List<Double> {
+        val sport = EngineSynth()
+        val plus = EngineSynth()
+        val a = FloatArray(441)
+        val b = FloatArray(441)
+        val out = ArrayList<Double>()
+        for ((rpm, thr) in steps) repeat(blocks) {
+            sport.render(a, rpm, thr, 1f, EngineSynth.Tune.SPORT)
+            plus.render(b, rpm, thr, 1f, EngineSynth.Tune.SPORT_PLUS)
+            out.add(sqrt(a.indices.sumOf { i -> (b[i] - a[i]).toDouble().let { it * it } } / a.size))
+        }
+        return out // rms of the turbo per 10 ms block
+    }
+
+    /** The whistle lags the throttle (spool) and builds to a clear level; there is none off boost. */
+    @Test fun turbo_whistleSpoolsUp() {
+        val t = turboOnly(listOf(4000.0 to 5.0, 4000.0 to 100.0), blocks = 200)
+        val offBoost = t[199]
+        val justStabbed = t[205]
+        val spooled = t[399]
+        assertTrue("off boost $offBoost", offBoost < 1e-3)
+        assertTrue("spool lag: 50 ms $justStabbed vs 2 s $spooled", justStabbed < 0.3 * spooled)
+        assertTrue("audible whistle $spooled", spooled > 0.01)
+    }
+
+    /** Lifting off boost gives a blow-off with a "stu-tu-tu" flutter that dies away; the turbo is then silent. */
+    @Test fun turbo_flutterOnLift() {
+        val t = turboOnly(listOf(4500.0 to 100.0, 3500.0 to 0.0), blocks = 200)
+        val pssh = (200 until 215).maxOf { t[it] }
+        val after = t[399]
+        assertTrue("blow-off $pssh", pssh > 0.01)
+        assertTrue("silent after: $after", after < 1e-3)
+        // Separate "tu"s: the 10 ms block level swells and falls several times in the first 0.6 s.
+        var swells = 0
+        for (i in 202 until 260) if (t[i] > 1.4 * t[i - 2] && t[i] > 0.004) swells++
+        assertTrue("flutter swells $swells", swells >= 4)
+    }
+
+    /** Switching mode mid-note glides: the first block after the switch has no bigger jumps than steady Sport+. */
+    @Test fun tune_changeDoesNotClick() {
+        val s = EngineSynth()
+        s.render(FloatArray(44100), 3000.0, 50.0, 1f)
+        val switched = FloatArray(441)
+        s.render(switched, 3000.0, 50.0, 1f, EngineSynth.Tune.SPORT_PLUS)
+        val steady = render(3000.0, 50.0, 1f, n = 441, warmup = 44100, tune = EngineSynth.Tune.SPORT_PLUS)
+        assertTrue("switch ${maxStep(switched)} steady ${maxStep(steady)}", maxStep(switched) <= 1.05f * maxStep(steady))
     }
 
     @Test fun render_deterministic() {
