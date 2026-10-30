@@ -15,8 +15,9 @@ import com.karan.dashboardx.audio.Chime
 import com.karan.dashboardx.audio.EngineSoundController
 
 /**
- * The car dashboard: a [NavigationTemplate] whose map area is our [SurfaceRenderer], with an
- * action strip of Style (cycle and persist the style) and Sound (on/off).
+ * The car dashboard: a [NavigationTemplate] whose map area is our full-screen [SurfaceRenderer],
+ * with a single Sound (on/off) action. A tap anywhere on the dash cycles and persists the style,
+ * like on the phone.
  * Holds the [DashRuntime] from create to destroy.
  *
  * Audio: owns one [EngineSoundController] (create to destroy), fed every drawn frame through
@@ -46,6 +47,11 @@ class DashScreen(carContext: CarContext) : Screen(carContext), DefaultLifecycleO
         // The audio thread switched itself off (posted on the main thread): show the icon as off.
         controller.onStateChanged = { if (sound === controller) invalidate() }
         renderer.onFrame = { f -> controller.update(f.rpm, f.throttle) }
+        renderer.onTap = {
+            val next = renderer.style.next()
+            renderer.style = next
+            DashRuntime.settings.style = next
+        }
         DashRuntime.onChime = chimeHook
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(renderer)
     }
@@ -68,6 +74,7 @@ class DashScreen(carContext: CarContext) : Screen(carContext), DefaultLifecycleO
     override fun onDestroy(owner: LifecycleOwner) {
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(null)
         renderer.onFrame = null
+        renderer.onTap = null
         sound?.onStateChanged = null
         sound?.release()
         sound = null
@@ -76,15 +83,6 @@ class DashScreen(carContext: CarContext) : Screen(carContext), DefaultLifecycleO
     }
 
     override fun onGetTemplate(): Template {
-        val style = Action.Builder()
-            .setIcon(CarIcons.style)
-            .setOnClickListener {
-                val next = renderer.style.next()
-                renderer.style = next
-                DashRuntime.settings.style = next
-                invalidate()
-            }
-            .build()
         val sound = Action.Builder()
             .setIcon(if (sound?.enabled == true) CarIcons.soundOn else CarIcons.soundOff)
             .setOnClickListener {
@@ -93,7 +91,7 @@ class DashScreen(carContext: CarContext) : Screen(carContext), DefaultLifecycleO
             }
             .build()
         return NavigationTemplate.Builder()
-            .setActionStrip(ActionStrip.Builder().addAction(style).addAction(sound).build())
+            .setActionStrip(ActionStrip.Builder().addAction(sound).build())
             .build()
     }
 }

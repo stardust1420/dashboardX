@@ -16,15 +16,10 @@ data class Viewport(val scale: Float, val dx: Float, val dy: Float) {
         }
 
         /**
-         * Fits into the visible area given as left/top/right/bottom (a car host's `visibleArea`),
-         * or into the whole surface when that area is empty (pass zeros when there is none).
-         * The surface size is clamped to at least 1 px so the scale stays positive.
+         * Fits into the whole surface (the car dash is full screen; the host's buttons float on top).
+         * The size is clamped to at least 1 px so the scale stays positive.
          */
-        fun fitVisibleOrSurface(
-            surfaceW: Int, surfaceH: Int,
-            left: Int, top: Int, right: Int, bottom: Int,
-        ): Viewport =
-            if (right > left && bottom > top) fit(left, top, right - left, bottom - top)
-            else fit(0, 0, surfaceW.coerceAtLeast(1), surfaceH.coerceAtLeast(1))
+        fun fitSurface(surfaceW: Int, surfaceH: Int): Viewport =
+            fit(0, 0, surfaceW.coerceAtLeast(1), surfaceH.coerceAtLeast(1))
     }
 }

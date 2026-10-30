@@ -16,7 +16,6 @@ import androidx.core.graphics.drawable.IconCompat
 internal object CarIcons {
     private const val SIZE = 96
 
-    val style: CarIcon by lazy { icon(::drawStyle) }
     val soundOn: CarIcon by lazy { icon { c, p -> drawSpeaker(c, p); drawWaves(c, p) } }
     val soundOff: CarIcon by lazy { icon { c, p -> drawSpeaker(c, p); drawCross(c, p) } }
 
@@ -36,17 +35,6 @@ internal object CarIcons {
         }
         draw(Canvas(bmp), paint)
         return bmp
-    }
-
-    /** A gauge: 270° arc, needle and hub. */
-    private fun drawStyle(c: Canvas, p: Paint) {
-        p.style = Paint.Style.STROKE
-        p.strokeWidth = 9f
-        c.drawArc(RectF(14f, 14f, 82f, 82f), 135f, 270f, false, p)
-        p.strokeWidth = 8f
-        c.drawLine(48f, 48f, 70f, 30f, p)
-        p.style = Paint.Style.FILL
-        c.drawCircle(48f, 48f, 8f, p)
     }
 
     private fun drawSpeaker(c: Canvas, p: Paint) {

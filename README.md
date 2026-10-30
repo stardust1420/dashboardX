@@ -113,10 +113,9 @@ Other settings on the same screen: engine sound volume (0 to 100 %), fuel calibr
 3. On the car screen, open the app launcher and tap **DashboardX**.
 4. It should connect to the adapter within about 10 seconds.
 
-Buttons on the car screen:
-The two buttons on the car screen are icons, with no text:
-- **Style** (a gauge icon: an arc with a needle and a centre dot): cycles Racing, HUD, Arcade, Luxury and Cluster layouts. The choice is remembered.
-- **Sound** (a speaker icon): a speaker with a cross means the engine sound is off, a speaker with sound waves means it is on. It starts **off** every time.
+On the car screen the dashboard fills the whole app area:
+- **Tap anywhere on the dashboard** to cycle the style: Racing, HUD, Arcade, Luxury, Cluster. The choice is remembered.
+- **Sound** (the one button, a speaker icon in the top-right corner): a speaker with a cross means the engine sound is off, a speaker with sound waves means it is on. It starts **off** every time.
 
 The engine sound is a smooth V8 note in the style of a Lexus: it rises evenly in pitch and brightness with the revs, with no hiss. Soft exhaust pops play when you lift off sharply, shift gear (the revs drop fast) or coast at high revs; steady driving stays clean. It plays in stereo on the car's media channel, so it uses all the speakers, and it lowers (ducks) your music instead of pausing it. When there is no RPM for about a second (engine off, adapter unplugged) it lets go and your music returns to full volume; it ducks again when RPM comes back. If the sound ever fails, the Sound icon switches back to off by itself.
 
@@ -135,7 +134,7 @@ The log includes the connection status, which sensors the car supports and a tim
 - **Oil temperature may show N/A.** Many cars, probably including the Verna, do not report it through the standard OBD channel.
 - **Fuel economy is an estimate.** It is calculated from airflow, not measured. To calibrate it against a fill-up, do one long, continuous drive:
   1. Fill the tank to the brim.
-  2. Switch to the **Racing** style first, because TRIP AVG is only drawn there (on the phone, tap the dashboard until it shows Racing; in the car, tap the gauge icon until it shows Racing).
+  2. Switch to the **Racing** style first, because TRIP AVG is only drawn there (on the phone, tap the dashboard until it shows Racing; in the car, tap the dashboard until it shows Racing).
   3. Start the app and drive the whole tank in one continuous drive. Keep the dashboard on screen (the car screen, or the phone app in front) the whole time, and do not switch Demo mode or pick an adapter.
   4. At the end, note the TRIP AVG km/l and the km on the car's trip meter.
   5. Fill to the brim again and note the litres added.

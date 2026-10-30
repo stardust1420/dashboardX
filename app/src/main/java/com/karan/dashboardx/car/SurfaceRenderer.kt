@@ -21,7 +21,8 @@ import java.util.EnumMap
 
 /**
  * Draws the current [style] into the host's Surface at ~30 fps on a dedicated render thread,
- * fitted to the host's visible area (the part not covered by the action strip and other chrome).
+ * fitted to the whole surface: full screen, with the host's Sound button floating on top.
+ * A tap anywhere on the surface calls [onTap] (hosts with Car API level 5+).
  *
  * Threading: surface and lifecycle callbacks arrive on the main thread; frames are drawn on
  * [thread]. All loop start/stop decisions run on the render thread, so there is never more than
@@ -34,6 +35,9 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
     /** Called on the render thread with each frame's model, before it is drawn (the engine sound feed). */
     @Volatile var onFrame: ((FrameModel) -> Unit)? = null
 
+    /** Called on the main thread when the user taps the surface (the style switch). */
+    var onTap: (() -> Unit)? = null
+
     private val fonts = Fonts(carContext)
     private val renderers = EnumMap<Style, GaugeRenderer>(Style::class.java) // render thread only
 
@@ -42,10 +46,7 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
 
     private val lock = Any()
     private var surface: Surface? = null // guarded by lock
-    private var surfaceW = 0 // main thread
-    private var surfaceH = 0 // main thread
-    private var visibleArea: Rect? = null // main thread
-    @Volatile private var viewport = Viewport.fitVisibleOrSurface(1, 1, 0, 0, 0, 0)
+    @Volatile private var viewport = Viewport.fitSurface(1, 1)
 
     @Volatile private var started = false
     private var looping = false // render thread only
@@ -68,22 +69,25 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
 
     override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
         synchronized(lock) { surface = surfaceContainer.surface }
-        surfaceW = surfaceContainer.width
-        surfaceH = surfaceContainer.height
-        DashRuntime.diag.add("car: surface ${surfaceW}x$surfaceH @${surfaceContainer.dpi}dpi")
-        updateViewport()
+        val w = surfaceContainer.width
+        val h = surfaceContainer.height
+        DashRuntime.diag.add("car: surface ${w}x$h @${surfaceContainer.dpi}dpi")
+        viewport = Viewport.fitSurface(w, h)
         startLoop()
     }
 
+    /** Logged only: the gauges fill the whole surface, under the action strip. */
     override fun onVisibleAreaChanged(visibleArea: Rect) {
-        this.visibleArea = Rect(visibleArea)
         DashRuntime.diag.add("car: visible area $visibleArea")
-        updateViewport()
     }
 
-    /** Logged only: the gauges fit the visible area, which already excludes the action strip. */
+    /** Logged only, like [onVisibleAreaChanged]. */
     override fun onStableAreaChanged(stableArea: Rect) {
         DashRuntime.diag.add("car: stable area $stableArea")
+    }
+
+    override fun onClick(x: Float, y: Float) {
+        onTap?.invoke()
     }
 
     override fun onSurfaceDestroyed(surfaceContainer: SurfaceContainer) {
@@ -112,12 +116,6 @@ class SurfaceRenderer(carContext: CarContext) : SurfaceCallback, DefaultLifecycl
     }
 
     // --- internals ---
-
-    private fun updateViewport() {
-        val v = visibleArea
-        viewport = if (v == null) Viewport.fitVisibleOrSurface(surfaceW, surfaceH, 0, 0, 0, 0)
-        else Viewport.fitVisibleOrSurface(surfaceW, surfaceH, v.left, v.top, v.right, v.bottom)
-    }
 
     private fun shouldRun(): Boolean = started && synchronized(lock) { surface != null }
 
