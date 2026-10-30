@@ -10,4 +10,9 @@ Sideloaded Android Auto OBD dashboard (Kotlin, `com.karan.dashboardx`). User gui
 
 ## Gotchas
 - Registered as a navigation app on purpose: only navigation apps can draw a full custom screen in Android Auto
+- `installDebug`/`adb install` builds don't show in Android Auto 17.7+ (Unknown sources doesn't cover Car App Library apps). For the car, install via KingInstaller (Realme switch); see README section 2. Check with `adb logcat -d | grep CAR.VALIDATOR`. Don't retry `adb install -i com.android.vending` or `pm set-installer`: ColorOS and Android block both
 - Bluetooth adapter type (Classic or BLE) is unknown, so keep both paths working
+
+## Device
+- `adb exec-out screencap -p > "$scratchpad/screen.png"`, then Read it - see the phone screen instead of asking the user to describe it
+- `sdkmanager` can't download inside the sandbox (even with the proxy JVM flags); ask the user to run it in a normal Terminal. The DHU (`extras;google;auto`) isn't installed yet

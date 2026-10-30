@@ -28,18 +28,31 @@ Or install the built APK directly:
 
 The APK is built by `tools/gradle.sh :app:assembleDebug`.
 
+Either way runs the app on the phone, but it will **not** appear in Android Auto. For the car, install through KingInstaller instead (section 2).
+
 Notes on build commands:
 - Use `tools/gradle.sh` inside Claude Code's sandbox. It handles the sandbox's proxy and temp folder.
 - Outside the sandbox (a normal Terminal), plain `./gradlew` also works once `JAVA_HOME` points at a JDK 17. Running `source env.sh` sets it from the JDK in `.tools/`.
 
 ## 2. Allow DashboardX in Android Auto
 
-Android Auto only shows apps from the Play Store unless you turn on developer mode.
+Android Auto 17.7 and newer hides sideloaded Car App Library apps such as DashboardX, even with Unknown sources on. It only lists them when the phone records the Play Store as the installer. A plain `adb install` records `pc` on the Realme, and `adb install -i com.android.vending` doesn't change that. What works is [KingInstaller](https://github.com/fcaronte/KingInstaller/releases) (v2.4, tested 2026-10-30 with Android Auto 17.9).
 
+### Turn on Unknown sources
 1. On the phone, open Android Auto settings (Settings, search "Android Auto").
 2. Tap **Version** about 10 times until it says developer mode is on.
 3. Tap the three dots (top right), then **Developer settings**.
 4. Turn **Unknown sources** ON.
+
+### Install with KingInstaller
+1. Copy the APK to the phone: `adb push app/build/outputs/apk/debug/app-debug.apk /sdcard/Download/DashboardX.apk`
+2. Uninstall DashboardX if it is already installed (`adb uninstall com.karan.dashboardx`). An update keeps the old installer record. This clears the app's settings, so pick the adapter again afterwards.
+3. In KingInstaller, turn **Oppo/Realme/OnePlus** ON (leave Root and Shizuku off). With all switches off, the installer is recorded as KingInstaller, which does not work.
+4. Tap **Select APK to install**, choose `Download/DashboardX.apk`, then **Install as king**. If asked, choose the default **Package installer**.
+5. Check: `adb shell pm list packages -i com.karan.dashboardx` must end with `installer=com.android.vending`.
+6. Force-stop Android Auto. DashboardX now shows in Android Auto settings, **Customize launcher**.
+
+Repeat this for every new build.
 
 DashboardX appears in the car as a **navigation app**. That is on purpose: Android Auto only lets navigation apps draw a full custom screen, which the dashboard needs.
 
@@ -119,13 +132,14 @@ The log includes the connection status, which sensors the car supports and a tim
 - **The gear is an estimate.** The car does not report it (Diagnostics shows "gear PID A4: supported" if yours does), so it is worked out from RPM ÷ speed. It shows "-" below 8 km/h, and during a shift it holds the old gear for up to 1.5 s before changing. It slowly corrects itself if the tyres or final drive differ from the stock Verna 1.6 automatic.
 - **The engine sound is delayed** by about 0.1 to 0.2 seconds, and it starts off on every drive.
 - **The Verna throttle may idle at 10 to 18 %.** The infinity (∞) fuel economy reading only appears when the throttle reads near zero while moving, so it may show rarely or never on this car. The exhaust crackle does not depend on that: it also plays when you lift off sharply or the revs drop fast (a gear shift).
-- **Not for the Play Store.** It is a personal sideloaded app and Android Auto will only show it with Unknown sources on.
+- **Not for the Play Store.** It is a personal sideloaded app. Android Auto only shows it when it was installed through KingInstaller (section 2), and a future Android Auto update may close that gap.
 
 ## 8. Troubleshooting
 
 - **Cannot connect or stuck on Reconnecting:** check Bluetooth is on (with Bluetooth off the app waits on "Reconnecting…" and connects within about 10 s of turning it on), the adapter is firmly in the port and the ignition is on. Unplug and replug it. The app retries automatically. If it still fails, re-pick the adapter in Settings.
 - **"No data from car — is the engine on?":** the adapter is connected but the car has sent no RPM for more than 3 s. Usually the ignition is off or the engine has stopped. Start the engine; the hint disappears as soon as data arrives. If it stays with the engine running, share the Diagnostics log.
 - **DEMO tag in the corner:** Demo mode is on and the numbers are simulated. Switch it off in Settings (or pick an adapter) to see the car.
+- **DashboardX missing from the car or Customize launcher:** run `adb logcat -d | grep CAR.VALIDATOR`. If it shows `Package DENIED; failed all other checks [com.karan.dashboardx]`, the install wasn't recorded as from the Play Store. Reinstall through KingInstaller (section 2).
 - **Black car screen:** open Diagnostics on the phone and look at the status and log. Check Unknown sources is still on, then unplug and replug the phone.
 - **No engine sound:** the Sound icon must show waves, not a cross (it resets to off each drive), the engine sound volume slider in Settings must not be at 0, and the car volume must be up.
 - **"Set up DashboardX" still showing:** pick an adapter, or switch Demo mode on. On Android 12 or newer, also check the Bluetooth permission is granted. (Bluetooth being off shows "Reconnecting…", not this message.)
